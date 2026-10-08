@@ -1,0 +1,48 @@
+name: MES Forward Test
+
+on:
+  schedule:
+    - cron: '0 22 * * 5'   # Fridays 22:00 UTC = 6 PM New York (5 PM after clocks fall back)
+  workflow_dispatch:        # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write           # needed to save the data files and results back to the repo
+
+jobs:
+  forward-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run forward tests
+        run: |
+          mkdir -p results
+          OUT="results/forward_$(TZ=America/New_York date +%F).md"
+          {
+            echo "# MES forward test - $(TZ=America/New_York date '+%F %-I:%M %p') ET"
+            echo
+            echo "## Heikin Ashi pullback (watch row 0: R:R 1, start 09:30)"
+            echo '```'
+            node mes_backtest.mjs 1m since 2026-10-09
+            echo '```'
+            echo
+            echo "## Opening Range Breakout (watch row 4: R:R 2, 15-min range)"
+            echo '```'
+            node mes_backtest.mjs orb 1m since 2026-10-09
+            echo '```'
+          } > "$OUT" 2>&1
+          node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too
+          cp "$OUT" results/LATEST.md
+          cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save data and results to the repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bars_*.json results/
+          git commit -m "Forward test $(date +%F)" || echo "Nothing new to commit"
+          git push
