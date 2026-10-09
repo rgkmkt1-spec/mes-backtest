@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write           # needed to save the data files and results back to the repo
 
+concurrency:
+  group: forward-test       # never run two copies at the same time
+  cancel-in-progress: false
+
 jobs:
   forward-test:
     runs-on: ubuntu-latest
@@ -45,4 +49,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bars_*.json results/
           git commit -m "Forward test $(date +%F)" || echo "Nothing new to commit"
+          git pull --rebase -X theirs origin main || true   # pick up any changes pushed since checkout
           git push
