@@ -40,6 +40,9 @@ jobs:
             echo '```'
           } > "$OUT" 2>&1
           node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too
+          # Bank MNQ (micro Nasdaq) data too, so it's available for future tests (not reported yet)
+          node mes_backtest.mjs mnq orb 1m > /dev/null 2>&1 || true
+          node mes_backtest.mjs mnq orb > /dev/null 2>&1 || true
           cp "$OUT" results/LATEST.md
           cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
 

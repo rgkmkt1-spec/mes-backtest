@@ -6,6 +6,7 @@
 //   node mes_backtest.mjs orb              -> Opening Range Breakout, 5-minute bars
 //   node mes_backtest.mjs orb 1m           -> Opening Range Breakout, 1-minute bars
 //   ... since 2026-10-09                   -> only count trades from that date on (forward test)
+//   ... mnq                                -> run on MNQ (micro Nasdaq) instead of MES, e.g. "node mes_backtest.mjs mnq orb 1m"
 //
 // Every run SAVES the downloaded bars to a local file (bars_5m.json / bars_1m.json) and merges
 // new data into it. Yahoo only serves ~30 days of 1-minute data, so this cache is what lets a
@@ -17,6 +18,11 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 // ---------- Command-line options ----------
 const args = process.argv.slice(2).map(a => a.toLowerCase());
+const MARKETS = {
+  mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
+  mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
+};
+const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
 const STRATEGY = args.includes('orb') ? 'orb' : 'ha';
 const sinceIdx = args.indexOf('since');
@@ -27,7 +33,7 @@ if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
 }
 
 // ---------- Contract + costs ----------
-const TICK = 0.25, POINT_VALUE = 5;          // MES: $1.25 per tick, $5 per point
+const TICK = MARKET.tick, POINT_VALUE = MARKET.pointValue;   // MES: $5/point ($1.25/tick). MNQ: $2/point ($0.50/tick)
 const COMMISSION_RT = 2.0;                   // $1 per side
 const SLIP = 1 * TICK;                       // 1 tick slippage on market entries and stop exits
 const RTH_OPEN = 9 * 60 + 30;                // 9:30 NY
@@ -83,7 +89,7 @@ async function download(sym) {
 
 async function loadBars() {
   if (process.env.SYNTH) return { bars: synthBars(), used: 'SYNTHETIC (self-test)' };
-  const cacheFile = `bars_${INTERVAL}.json`;
+  const cacheFile = `${MARKET.cachePrefix}${INTERVAL}.json`;
   const cache = new Map();
   if (existsSync(cacheFile)) {
     try { for (const b of JSON.parse(readFileSync(cacheFile, 'utf8'))) cache.set(b.t, b); }
@@ -91,13 +97,13 @@ async function loadBars() {
   }
   const before = cache.size;
   let fresh = null;
-  try { fresh = await download('MES=F'); } catch (e) { console.log(`Could not download MES=F: ${e.message}`); }
+  try { fresh = await download(MARKET.sym); } catch (e) { console.log(`Could not download ${MARKET.sym}: ${e.message}`); }
   if (fresh) for (const b of fresh) cache.set(b.t, b);
   if (!cache.size) { console.log('No data available. Check your internet connection and try again.'); process.exit(1); }
   const bars = [...cache.values()].sort((a, b) => a.t - b.t);
   writeFileSync(cacheFile, JSON.stringify(bars));
   const note = fresh ? `${cache.size - before} new bars added to ${cacheFile}` : `download failed, using saved ${cacheFile}`;
-  return { bars, used: `MES=F (${note})` };
+  return { bars, used: `${MARKET.sym} (${note})` };
 }
 
 function synthBars(n = 12000) { // offline self-test only (SYNTH=1)
@@ -269,11 +275,51 @@ function stats(trades, key = 'pnl') {
 // ---------- Main ----------
 const { bars, used } = await loadBars();
 for (const b of bars) b.ny = nyTime(b.t);
+
+// The "skip if stop is wider than X points" limits were set for MES.
+// For other markets, scale them by how much that market actually MOVES compared to MES:
+// the typical (median) size of the first 15 minutes after the open, measured over the
+// same saved data. Falls back to the price ratio if no MES data file is present.
+// MES values are untouched.
+function medianOpeningRange(bs) {
+  const byDay = new Map();
+  for (const b of bs) {
+    if (b.ny.mins < RTH_OPEN || b.ny.mins >= RTH_OPEN + 15) continue;
+    const d = byDay.get(b.ny.date) || { h: -Infinity, l: Infinity };
+    d.h = Math.max(d.h, b.h); d.l = Math.min(d.l, b.l);
+    byDay.set(b.ny.date, d);
+  }
+  const w = [...byDay.values()].map(d => d.h - d.l).filter(x => x > 0).sort((a, b) => a - b);
+  return w.length ? w[Math.floor(w.length / 2)] : null;
+}
+let scaleNote = '';
+if (MARKET !== MARKETS.mes) {
+  let scale = null, how = '';
+  const mesFile = `${MARKETS.mes.cachePrefix}${INTERVAL}.json`;
+  if (!process.env.SYNTH && existsSync(mesFile)) {
+    try {
+      const mesBars = JSON.parse(readFileSync(mesFile, 'utf8'));
+      for (const b of mesBars) b.ny = nyTime(b.t);
+      const a = medianOpeningRange(bars), m = medianOpeningRange(mesBars);
+      if (a && m) { scale = a / m; how = `typical first-15-min range ${a.toFixed(1)} pts vs MES ${m.toFixed(1)} pts`; }
+    } catch { /* fall through to price ratio */ }
+  }
+  if (!scale) {
+    const closes = bars.map(b => b.c).sort((a, b) => a - b);
+    scale = closes[Math.floor(closes.length / 2)] / 7800;
+    how = 'price ratio (no MES data file found)';
+  }
+  HA.maxStopPts = Math.round(HA.maxStopPts * scale * 4) / 4;
+  ORB.maxStopPts = Math.round(ORB.maxStopPts * scale * 4) / 4;
+  scaleNote = `Max stop scaled x${scale.toFixed(2)} by ${how}: HA ${HA.maxStopPts} pts, ORB ${ORB.maxStopPts} pts`;
+}
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
 const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : 'Opening Range Breakout';
-console.log(`\nStrategy: ${stratName}, ${INTERVAL} bars`);
+console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
+console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
+if (scaleNote) console.log(scaleNote);
 console.log(`Data: ${used}`);
 console.log(`      ${bars[0].ny.date} to ${bars.at(-1).ny.date} (NY time), ${rthDays()} trading days`);
 if (SINCE) console.log(`FORWARD TEST: only counting trades from ${SINCE} on (${rthDays(SINCE)} trading days so far)`);
@@ -300,7 +346,7 @@ const csv = [cols.join(',')].concat(allTrades.map(t => cols.map(c => {
   const v = c === 'dir' ? (t.dir === 1 ? 'Long' : 'Short') : t[c];
   return typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : `"${v}"`;
 }).join(','))).join('\n');
-const outFile = `trades_${STRATEGY}_${INTERVAL}${SINCE ? '_since_' + SINCE : ''}.csv`;
+const outFile = `trades_${MARKET.filePrefix}${STRATEGY}_${INTERVAL}${SINCE ? '_since_' + SINCE : ''}.csv`;
 writeFileSync(outFile, csv);
 console.log(`\nSaved ${allTrades.length} trades to ${outFile}`);
 console.log(`"Same-bar" = trades where one ${INTERVAL} candle touched BOTH stop and target. Counted as losses (worst case);`);
