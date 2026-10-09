@@ -1,10 +1,10 @@
-# MES forward test - 2026-10-08 8:02 PM ET
+# MES forward test - 2026-10-08 8:15 PM ET
 
 ## Heikin Ashi pullback (watch row 0: R:R 1, start 09:30)
 ```
 
 Strategy: Heikin Ashi pullback, 1m bars
-Data: MES=F (196 new bars added to bars_1m.json)
+Data: MES=F (14 new bars added to bars_1m.json)
       2026-09-09 to 2026-10-08 (NY time), 21 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (0 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -30,7 +30,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 ```
 
 Strategy: Opening Range Breakout, 1m bars
-Data: MES=F (0 new bars added to bars_1m.json)
+Data: MES=F (1 new bars added to bars_1m.json)
       2026-09-09 to 2026-10-08 (NY time), 21 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (0 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
