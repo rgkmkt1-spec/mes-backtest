@@ -1,4 +1,4 @@
-# MES forward test - 2026-10-10 7:50 PM ET
+# MES forward test - 2026-10-10 7:52 PM ET
 
 ## Heikin Ashi pullback (watch row 0: R:R 1, start 09:30)
 ```
@@ -6,7 +6,7 @@
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Heikin Ashi pullback, 1m bars
-Data: MES=F (5 new bars added to bars_1m.json)
+Data: MES=F (131 new bars added to bars_1m.json)
       2026-09-10 to 2026-10-09 (NY time), 21 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (1 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -62,7 +62,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Supply & demand zones (200 EMA), 5m bars
 Max stop scaled x7.98 by typical first-15-min range 131.8 pts vs MES 16.5 pts: HA 64 pts, ORB 95.75 pts
-Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (16 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-10-09 (NY time), 51 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -86,3 +86,223 @@ Saved 0 trades to trades_mnq_sd_5m_since_2026-10-12.csv
 the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
 
 ```
+
+## 3AM-range liquidity sweep - MES (watch row 4: sweep, R:R 1.5) - started 2026-10-12
+```
+
+Market: MES (Micro E-mini S&P 500), $5 per point
+Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
+Data: MES=F (1 new bars added to bars_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant    │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 1.5 │ 'breakout' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 2   │ 'breakout' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 1.5 │ 'retest'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 2   │ 'retest'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 4       │ 1.5 │ 'sweep'    │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 5       │ 2   │ 'sweep'    │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_ldn_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## Previous-day high/low retest - MES (watch row 3: no trend filter, R:R 2) - started 2026-10-12
+```
+
+Market: MES (Micro E-mini S&P 500), $5 per point
+Strategy: Previous-day high/low break & retest + daily 9/21 EMA trend, 5m bars
+Data: MES=F (0 new bars added to bars_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬───────────────────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant                   │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼───────────────────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 1.5 │ 'with daily trend filter' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 1.5 │ 'no trend filter'         │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 2   │ 'with daily trend filter' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 2   │ 'no trend filter'         │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴───────────────────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_pdh_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## Previous-day high/low retest - MNQ (watch row 3: no trend filter, R:R 2) - started 2026-10-12
+```
+
+Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
+Strategy: Previous-day high/low break & retest + daily 9/21 EMA trend, 5m bars
+Max stop scaled x7.98 by typical first-15-min range 131.8 pts vs MES 16.5 pts: HA 64 pts, ORB 95.75 pts
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬───────────────────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant                   │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼───────────────────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 1.5 │ 'with daily trend filter' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 1.5 │ 'no trend filter'         │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 2   │ 'with daily trend filter' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 2   │ 'no trend filter'         │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴───────────────────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_mnq_pdh_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## First-candle FVG, day entry - MNQ (watch row 2: 15-min range, 5-min gap, limit, R:R 2) - started 2026-10-12
+```
+
+Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
+Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
+Max stop scaled x7.98 by typical first-15-min range 131.8 pts vs MES 16.5 pts: HA 64 pts, ORB 95.75 pts
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬────────────────────────────────────────────────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant                                                │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼────────────────────────────────────────────────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 3   │ 'SCALP: 5-min range, 1-min gap, engulf entry (his 3R)' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 2   │ 'SCALP: same, 2R'                                      │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 2   │ 'DAY: 15-min range, 5-min gap, limit entry (his 2R)'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 3   │ 'DAY: same, 3R'                                        │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴────────────────────────────────────────────────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_mnq_fvgo_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+# Confirmation tracks (same locked versions, other market)
+
+## ORB on MNQ (watch row 4: R:R 2, 15-min range)
+```
+  (skipped one 7-day chunk for MNQ=F: no data returned)
+
+Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
+Strategy: Opening Range Breakout, 1m bars
+Max stop scaled x8.41 by typical first-15-min range 124.0 pts vs MES 14.8 pts: HA 67.25 pts, ORB 101 pts
+Data: MNQ=F (132 new bars added to bars_mnq_1m.json)
+      2026-09-09 to 2026-10-09 (NY time), 22 trading days
+FORWARD TEST: only counting trades from 2026-10-09 on (1 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬────────────────┬────────┬───────┬───────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant        │ Trades │ Win % │ Net $     │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼────────────────┼────────┼───────┼───────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 1   │ '15-min range' │ 1      │ '0'   │ '-188.00' │ '0.00'        │ '188.00' │ 0        │ '-188.00'               │
+│ 1       │ 1   │ '30-min range' │ 0      │ '-'   │ '0.00'    │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 1.5 │ '15-min range' │ 1      │ '0'   │ '-188.00' │ '0.00'        │ '188.00' │ 0        │ '-188.00'               │
+│ 3       │ 1.5 │ '30-min range' │ 0      │ '-'   │ '0.00'    │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 4       │ 2   │ '15-min range' │ 1      │ '0'   │ '-188.00' │ '0.00'        │ '188.00' │ 0        │ '-188.00'               │
+│ 5       │ 2   │ '30-min range' │ 0      │ '-'   │ '0.00'    │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴────────────────┴────────┴───────┴───────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 3 trades to trades_mnq_orb_1m_since_2026-10-09.csv
+"Same-bar" = trades where one 1m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## Supply & demand on MES (watch row 1: R:R 2, 30-min chart)
+```
+
+Market: MES (Micro E-mini S&P 500), $5 per point
+Strategy: Supply & demand zones (200 EMA), 5m bars
+Data: MES=F (0 new bars added to bars_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬────────┬────────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R    │ Variant        │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼────────┼────────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 'push' │ '30-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 2      │ '30-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 3      │ '30-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 'push' │ '15-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 4       │ 2      │ '15-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 5       │ 3      │ '15-min chart' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 6       │ 'push' │ '5-min chart'  │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 7       │ 2      │ '5-min chart'  │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 8       │ 3      │ '5-min chart'  │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴────────┴────────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_sd_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## 3AM-range sweep on MNQ (watch row 4: sweep, R:R 1.5)
+```
+
+Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
+Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
+Max stop scaled x7.98 by typical first-15-min range 131.8 pts vs MES 16.5 pts: HA 64 pts, ORB 95.75 pts
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant    │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 1.5 │ 'breakout' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 2   │ 'breakout' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 1.5 │ 'retest'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 2   │ 'retest'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 4       │ 1.5 │ 'sweep'    │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 5       │ 2   │ 'sweep'    │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_mnq_ldn_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+## First-candle FVG day entry on MES (watch row 2: R:R 2)
+```
+
+Market: MES (Micro E-mini S&P 500), $5 per point
+Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
+Data: MES=F (0 new bars added to bars_5m.json)
+      2026-07-30 to 2026-10-09 (NY time), 51 trading days
+FORWARD TEST: only counting trades from 2026-10-12 on (0 trading days so far)
+Costs: $2 round-trip commission + 1 tick slippage on entries and stops
+
+┌─────────┬─────┬────────────────────────────────────────────────────────┬────────┬───────┬────────┬───────────────┬──────────┬──────────┬─────────────────────────┐
+│ (index) │ R:R │ Variant                                                │ Trades │ Win % │ Net $  │ Profit factor │ Max DD $ │ Same-bar │ Net $ if same-bar = win │
+├─────────┼─────┼────────────────────────────────────────────────────────┼────────┼───────┼────────┼───────────────┼──────────┼──────────┼─────────────────────────┤
+│ 0       │ 3   │ 'SCALP: 5-min range, 1-min gap, engulf entry (his 3R)' │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 1       │ 2   │ 'SCALP: same, 2R'                                      │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 2       │ 2   │ 'DAY: 15-min range, 5-min gap, limit entry (his 2R)'   │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+│ 3       │ 3   │ 'DAY: same, 3R'                                        │ 0      │ '-'   │ '0.00' │ '0.00'        │ '0.00'   │ 0        │ '0.00'                  │
+└─────────┴─────┴────────────────────────────────────────────────────────┴────────┴───────┴────────┴───────────────┴──────────┴──────────┴─────────────────────────┘
+
+Saved 0 trades to trades_fvgo_5m_since_2026-10-12.csv
+"Same-bar" = trades where one 5m candle touched BOTH stop and target. Counted as losses (worst case);
+the last column shows the result if they had all been wins (best case). Truth is somewhere in between.
+
+```
+
+_Pass rules (set in advance): 30+ trades, profit factor above 1.3, positive on BOTH markets._
