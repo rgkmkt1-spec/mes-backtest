@@ -38,6 +38,11 @@ jobs:
             echo '```'
             node mes_backtest.mjs orb 1m since 2026-10-09
             echo '```'
+            echo
+            echo "## Supply & demand zones - MNQ (watch row 1: R:R 2, 30-min chart) - started 2026-10-12"
+            echo '```'
+            node mes_backtest.mjs mnq sd since 2026-10-12
+            echo '```'
           } > "$OUT" 2>&1
           node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too
           # Bank MNQ (micro Nasdaq) data too, so it's available for future tests (not reported yet)

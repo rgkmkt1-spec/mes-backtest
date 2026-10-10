@@ -7,6 +7,7 @@
 //   node mes_backtest.mjs orb 1m           -> Opening Range Breakout, 1-minute bars
 //   ... since 2026-10-09                   -> only count trades from that date on (forward test)
 //   ... mnq                                -> run on MNQ (micro Nasdaq) instead of MES, e.g. "node mes_backtest.mjs mnq orb 1m"
+//   node mes_backtest.mjs sd               -> Supply & demand zones + 200 EMA, tested on 30/15/5-min charts
 //
 // Every run SAVES the downloaded bars to a local file (bars_5m.json / bars_1m.json) and merges
 // new data into it. Yahoo only serves ~30 days of 1-minute data, so this cache is what lets a
@@ -24,7 +25,7 @@ const MARKETS = {
 };
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -52,9 +53,23 @@ const ORB = {
   entryEnd: '11:30', flatTime: '15:50', maxStopPts: 12,
 };
 
+const SD = {
+  // Supply & demand zones with a 200 EMA trend filter (signals on 5/15/30-min candles,
+  // trades simulated on the underlying 1m or 5m bars).
+  emaLen: 200, atrLen: 14,
+  pushBars: 3,            // "big push" = 3+ candles in a row in the trend direction...
+  pushAtr: 2,             // ...that together move at least 2x the average candle size
+  maxZoneAtr: 1.5,        // skip zones whose base candle is bigger than 1.5x average ("too big")
+  expiryHours: 48,        // a zone is cancelled after 2 days
+  stopBufTicks: 1,
+  entryStart: '09:30', entryEnd: '15:30', flatTime: '15:55', maxTrades: 3,
+};
+
 const VARIANTS = STRATEGY === 'ha'
   ? [1, 1.5, 2].flatMap(rr => ['09:30', '09:45'].map(start => ({ rr, start, label: `start ${start}` })))
-  : [1, 1.5, 2].flatMap(rr => [15, 30].map(orMin => ({ rr, orMin, label: `${orMin}-min range` })));
+  : STRATEGY === 'orb'
+  ? [1, 1.5, 2].flatMap(rr => [15, 30].map(orMin => ({ rr, orMin, label: `${orMin}-min range` })))
+  : [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })));
 
 // ---------- Data (with local cache) ----------
 async function fetchChart(sym, query) {
@@ -93,7 +108,7 @@ async function loadBars() {
   const cache = new Map();
   if (existsSync(cacheFile)) {
     try { for (const b of JSON.parse(readFileSync(cacheFile, 'utf8'))) cache.set(b.t, b); }
-    catch { console.log(`  (could not read ${cacheFile}; starting fresh)`); }
+    catch { console.log(`  WARNING: could not read ${cacheFile} (damaged - possibly a git merge conflict). Using fresh download only.`); }
   }
   const before = cache.size;
   let fresh = null;
@@ -101,8 +116,13 @@ async function loadBars() {
   if (fresh) for (const b of fresh) cache.set(b.t, b);
   if (!cache.size) { console.log('No data available. Check your internet connection and try again.'); process.exit(1); }
   const bars = [...cache.values()].sort((a, b) => a.t - b.t);
-  writeFileSync(cacheFile, JSON.stringify(bars));
-  const note = fresh ? `${cache.size - before} new bars added to ${cacheFile}` : `download failed, using saved ${cacheFile}`;
+  // Only the GitHub Actions bot saves the data files. Local runs use the merged data in memory
+  // but never change the saved files, so "git pull" can't hit merge conflicts on them.
+  const saving = process.env.GITHUB_ACTIONS === 'true' || process.env.SAVE_BARS === '1';
+  if (saving) writeFileSync(cacheFile, JSON.stringify(bars));
+  const note = fresh
+    ? `${cache.size - before} new bars ${saving ? `added to ${cacheFile}` : `downloaded (not saved locally; the weekly GitHub run saves ${cacheFile})`}`
+    : `download failed, using saved ${cacheFile}`;
   return { bars, used: `${MARKET.sym} (${note})` };
 }
 
@@ -262,6 +282,123 @@ function runORB(bars, { rr, orMin }) {
   return trades;
 }
 
+// ---------- Strategy 3: Supply & demand zones (200 EMA trend) ----------
+// Signals come from tfMin-minute candles built out of the base bars; fills, stops and
+// targets are simulated on the base bars themselves (1m or 5m) for accuracy.
+function aggregate(bars, tfMin) {
+  const sec = tfMin * 60, out = [];
+  let cur = null;
+  for (const b of bars) {
+    const start = Math.floor(b.t / sec) * sec;
+    if (!cur || cur.t !== start) {
+      cur = { t: start, end: start + sec, o: b.o, h: b.h, l: b.l, c: b.c };
+      out.push(cur);
+    } else { cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); cur.c = b.c; }
+  }
+  // indicators: 200 EMA of close, average candle size (simple mean of high-low)
+  const k = 2 / (SD.emaLen + 1);
+  let ema = null;
+  for (let i = 0; i < out.length; i++) {
+    const x = out[i];
+    ema = ema == null ? x.c : x.c * k + ema * (1 - k);
+    x.ema = ema;
+    const from = Math.max(0, i - SD.atrLen + 1);
+    let sum = 0; for (let j = from; j <= i; j++) sum += out[j].h - out[j].l;
+    x.atr = sum / (i - from + 1);
+  }
+  return out;
+}
+
+function runSD(bars, { rr, tf }) {
+  const tfBars = aggregate(bars, tf);
+  const sMin = toMins(SD.entryStart), eMin = toMins(SD.entryEnd), fMin = toMins(SD.flatTime);
+  const trades = [];
+  let zones = [], pos = null, k = 0, last = null, day = null, nT = 0;
+  const warm = SD.emaLen;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+
+    // 1) close out any signal candles that have finished by the start of this bar
+    while (k < tfBars.length && tfBars[k].end <= b.t) {
+      const x = tfBars[k]; last = x;
+      // invalidate zones that a candle closed through, or that expired
+      for (const z of zones) {
+        if (z.dead) continue;
+        if (z.dir === 1 ? x.c < z.lo : x.c > z.hi) z.dead = true;
+        if (x.end - z.created > SD.expiryHours * 3600) z.dead = true;
+      }
+      // detect a new "big push" ending on this candle
+      if (k >= warm) {
+        const up = x.c > x.o, dn = x.c < x.o;
+        if (up || dn) {
+          const d = up ? 1 : -1;
+          let s = k;
+          while (s - 1 >= 0 && (d === 1 ? tfBars[s - 1].c > tfBars[s - 1].o : tfBars[s - 1].c < tfBars[s - 1].o)) s--;
+          const runLen = k - s + 1;
+          const move = (x.c - tfBars[s].o) * d;
+          const base = tfBars[s - 1];
+          // qualify exactly once per run: the first candle where it meets both conditions
+          const qualifies = runLen >= SD.pushBars && move >= SD.pushAtr * x.atr;
+          const prevQualified = runLen - 1 >= SD.pushBars && ((tfBars[k - 1].c - tfBars[s].o) * d) >= SD.pushAtr * tfBars[k - 1].atr;
+          const trendOk = d === 1 ? x.c > x.ema : x.c < x.ema;
+          if (qualifies && !prevQualified && trendOk && base && (base.h - base.l) <= SD.maxZoneAtr * x.atr && (base.h - base.l) > 0) {
+            let ext = d === 1 ? -Infinity : Infinity;
+            for (let j = s; j <= k; j++) ext = d === 1 ? Math.max(ext, tfBars[j].h) : Math.min(ext, tfBars[j].l);
+            zones.push({ dir: d, lo: base.l, hi: base.h, ext, created: x.end, baseTime: nyTime(base.t), dead: false });
+          }
+        }
+      }
+      k++;
+    }
+    zones = zones.filter(z => !z.dead);
+
+    // 2) manage an open position
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+
+    // 3) check zones for a first touch on this bar
+    for (const z of zones) {
+      if (z.dead) continue;
+      const touched = z.dir === 1 ? b.l <= z.hi : b.h >= z.lo;
+      if (!touched) {                       // keep extending the push extreme until price returns
+        z.ext = z.dir === 1 ? Math.max(z.ext, b.h) : Math.min(z.ext, b.l);
+        continue;
+      }
+      z.dead = true;                        // a zone gets one chance: the first return
+      const d = z.dir;
+      const inEntry = b.ny.mins >= sMin && b.ny.mins < eMin;
+      const trendNow = last && (d === 1 ? last.c > last.ema : last.c < last.ema);
+      const gappedThrough = d === 1 ? b.o < z.lo : b.o > z.hi;
+      if (pos || !inEntry || !trendNow || nT >= SD.maxTrades || gappedThrough || i + 1 >= bars.length) continue;
+
+      const limit = d === 1 ? z.hi : z.lo;
+      const entry = d === 1 ? Math.min(b.o, limit) : Math.max(b.o, limit);   // better fill if it opened inside the zone
+      const stop = roundTick(d === 1 ? z.lo - SD.stopBufTicks * TICK : z.hi + SD.stopBufTicks * TICK);
+      const risk = (entry - stop) * d;
+      const target = rr === 'push' ? roundTick(z.ext) : roundTick(entry + d * rr * risk);
+      if (risk <= 0 || (target - entry) * d <= 0) continue;
+      nT++;
+      const p = {
+        dir: d, entryIdx: i + 1, date: b.ny.date,
+        signalTime: `${z.baseTime.date} ${z.baseTime.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+        entry, stop, target,
+        setup: `${d === 1 ? 'demand' : 'supply'} zone ${z.lo.toFixed(2)}-${z.hi.toFixed(2)}, push ${d === 1 ? 'high' : 'low'} ${z.ext.toFixed(2)}`,
+      };
+      // the fill bar itself: if it also reached the stop, assume the stop was hit (worst case)
+      if (d === 1 ? b.l <= stop : b.h >= stop) {
+        const exit = stop - d * SLIP;
+        const pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+        trades.push({ ...p, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (fill bar)', ambiguous: false, pnl, pnlBest: pnl });
+      } else pos = p;
+    }
+  }
+  return trades;
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -316,7 +453,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : 'Opening Range Breakout';
+const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : 'Supply & demand zones (200 EMA)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -327,7 +464,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : runORB(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : runSD(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
