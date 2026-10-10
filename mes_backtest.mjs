@@ -12,6 +12,7 @@
 //   node mes_backtest.mjs ldn              -> 3AM-9:30 range: breakout / retest / liquidity sweep
 //   node mes_backtest.mjs orr              -> 30-min opening range (9:30-10:00): breakout / retest / sweep
 //   node mes_backtest.mjs h2               -> Two-legged pullback to 21 EMA (5-min chart; add 1m for 1-min chart)
+//   node mes_backtest.mjs cs               -> 15m structure bias + change of character + fair value gap midpoint entry
 //   node mes_backtest.mjs pdh              -> Previous-day high/low break & retest with daily 9/21 EMA trend filter
 //   node mes_backtest.mjs fbr              -> First-bar reversal: fade a big 9:30 bar once price crosses its midpoint
 //   node mes_backtest.mjs dorb             -> Displacement ORB (9:30-9:45) + demand/supply zone entry + London/NY session filter
@@ -30,7 +31,7 @@ const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
 };
-const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh'];
+const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -40,7 +41,7 @@ if (unknown.length) {
 }
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -88,6 +89,14 @@ const VARIANTS = STRATEGY === 'ha'
   ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
   : STRATEGY === 'ldn'
   ? ['breakout', 'retest', 'sweep'].flatMap(mode => [1.5, 2].map(rr => ({ rr, mode, label: mode })))
+  : STRATEGY === 'eng'
+  ? ['long', 'both'].flatMap(side => [1.5, 2].map(rr => ({ rr, side, label: side === 'long' ? 'longs only (as in video)' : 'longs + mirrored shorts' })))
+  : STRATEGY === 'scalp'
+  ? ['or5', 'pm', 'pdh'].flatMap(level => [2, 3].map(rr => ({ rr, level, label: { or5: 'first 5-min candle hi/lo', pm: 'premarket hi/lo (4:00-9:30)', pdh: 'previous-day hi/lo' }[level] })))
+  : STRATEGY === 'slc'
+  ? [14, 5].flatMap(stochLen => ['fresh', 'both'].map(mode => ({ rr: 2, stochLen, mode, label: `stoch ${stochLen}, ${mode === 'fresh' ? 'untouched zones only' : 'untouched + break-and-retest'}` })))
+  : STRATEGY === 'cs'
+  ? [{ rr: 2, be: false, label: 'target 2R' }, { rr: 4, be: false, label: 'target 4R' }, { rr: 4, be: true, label: 'target 4R, breakeven at +2R' }]
   : STRATEGY === 'pdh'
   ? [1.5, 2].flatMap(rr => ['on', 'off'].map(filter => ({ rr, filter, label: filter === 'on' ? 'with daily trend filter' : 'no trend filter' })))
   : STRATEGY === 'fbr'
@@ -155,7 +164,7 @@ async function loadBars() {
   return { bars, used: `${MARKET.sym} (${note})` };
 }
 
-function synthBars(n = 12000) { // offline self-test only (SYNTH=1)
+function synthBars(n = +(process.env.SYNTH_N || 12000)) { // offline self-test only (SYNTH=1)
   const bars = []; let p = 7000; let t = Date.UTC(2026, 7, 3, 4, 0) / 1000;
   const step = INTERVAL === '1m' ? 60 : 300;
   for (let i = 0; i < n; i++) {
@@ -927,6 +936,373 @@ function runPDH(bars, { rr, filter }) {
   return trades;
 }
 
+// ---------- Strategy 10: Market-structure change of character + fair value gap midpoint entry ----------
+// 15-min structure gives the bias; the trading chart (base bars: 1m or 5m) gives the change of character,
+// the fair value gap and the swing ("liquidity inflection") level for the stop.
+function makeStructure(k = 2) {
+  return {
+    hi: null, lo: null, state: 0,
+    step(arr, i) {
+      const j = i - k;
+      if (j - k >= 0) {
+        let isH = true, isL = true;
+        for (let t = j - k; t <= j + k; t++) {
+          if (t === j) continue;
+          if (arr[t].h >= arr[j].h) isH = false;
+          if (arr[t].l <= arr[j].l) isL = false;
+        }
+        if (isH) this.hi = { p: arr[j].h, used: false };
+        if (isL) this.lo = { p: arr[j].l, used: false };
+      }
+      const x = arr[i];
+      if (this.hi && !this.hi.used && x.c > this.hi.p) {
+        this.hi.used = true; const ev = this.state === 1 ? 'bos+' : 'choch+'; this.state = 1; return ev;
+      }
+      if (this.lo && !this.lo.used && x.c < this.lo.p) {
+        this.lo.used = true; const ev = this.state === -1 ? 'bos-' : 'choch-'; this.state = -1; return ev;
+      }
+      return '';
+    },
+  };
+}
+const CS = { sigStart: '09:30', sigEnd: '12:00', flatTime: '15:55', maxTrades: 2, orderBars: 30, minGapAtr: 0.2, maxStopAtr: 6 };
+function runCS(bars, { rr, be }) {
+  for (let i = 0; i < bars.length; i++) {                     // average bar size on the trading chart
+    const from = Math.max(0, i - 13);
+    let s = 0; for (let j = from; j <= i; j++) s += bars[j].h - bars[j].l;
+    bars[i].atrCS = s / (i - from + 1);
+  }
+  const h15 = aggregate(bars, 15);
+  const htf = makeStructure(2), ltf = makeStructure(2);
+  const sMin = toMins(CS.sigStart), eMin = toMins(CS.sigEnd), fMin = toMins(CS.flatTime);
+  const trades = [];
+  let k = 0, pos = null, order = null, day = null, nT = 0;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; order = null; }
+    while (k < h15.length && h15[k].end <= b.t) { htf.step(h15, k); k++; }
+
+    // 1) manage open position (breakeven move takes effect from the bar after +2R is reached)
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+      else if (pos.be && !pos.beDone && (pos.dir === 1 ? b.h >= pos.beTrig : b.l <= pos.beTrig)) { pos.stop = pos.entry; pos.beDone = true; }
+    }
+
+    // 2) pending limit order at the gap midpoint
+    if (order && !pos) {
+      const d = order.dir, inWin = b.ny.mins >= sMin && b.ny.mins < eMin;
+      if (!inWin || i > order.expires || (d === 1 ? b.l <= order.stop : b.h >= order.stop) && !(d === 1 ? b.o > order.limit && b.l <= order.limit : b.o < order.limit && b.h >= order.limit)) {
+        // expired, out of hours, or price ran through the stop level before filling
+        if (!inWin || i > order.expires || (d === 1 ? b.o <= order.stop : b.o >= order.stop)) order = null;
+      }
+      if (order && (d === 1 ? b.l <= order.limit : b.h >= order.limit)) {
+        const entry = d === 1 ? Math.min(b.o, order.limit) : Math.max(b.o, order.limit);
+        const risk = (entry - order.stop) * d;
+        const o = order; order = null;
+        if (risk > 0) {
+          nT++;
+          const p0 = {
+            dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: o.signalTime, entryTime: `${b.ny.date} ${b.ny.hm}`,
+            entry, stop: o.stop, target: roundTick(entry + d * rr * risk), be, beDone: false, beTrig: entry + d * 2 * risk,
+            setup: o.setup,
+          };
+          if (d === 1 ? b.l <= o.stop : b.h >= o.stop) {
+            const exit = o.stop - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+            trades.push({ ...p0, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (fill bar)', ambiguous: false, pnl, pnlBest: pnl });
+          } else pos = p0;
+        }
+      }
+    }
+
+    // 3) structure on the trading chart, at this bar's close
+    const ev = ltf.step(bars, i);
+    const inSig = b.ny.mins >= sMin && b.ny.mins < eMin;
+    if (!inSig || pos || order || nT >= CS.maxTrades || i < 4) continue;
+    const d = ev === 'choch+' ? 1 : ev === 'choch-' ? -1 : 0;
+    if (!d || htf.state !== d) continue;
+    const swing = d === 1 ? ltf.lo : ltf.hi;                     // the liquidity inflection level
+    if (!swing) continue;
+    let gap = null;
+    for (const c of [i, i - 1]) {                                // gap formed by the breaking move
+      const a = bars[c - 2], z = bars[c];
+      const lo = d === 1 ? a.h : z.h, hi = d === 1 ? z.l : a.l;
+      if (hi - lo >= CS.minGapAtr * b.atrCS) { gap = { lo, hi }; break; }
+    }
+    if (!gap) continue;
+    const limit = roundTick((gap.lo + gap.hi) / 2);
+    const stop = roundTick(d === 1 ? swing.p - TICK : swing.p + TICK);
+    const risk = (limit - stop) * d;
+    if (risk <= 0 || risk > CS.maxStopAtr * b.atrCS) continue;
+    order = {
+      dir: d, limit, stop, expires: i + CS.orderBars, signalTime: `${b.ny.date} ${b.ny.hm}`,
+      setup: `${d === 1 ? 'bullish' : 'bearish'} CHoCH with 15m bias; FVG ${gap.lo.toFixed(2)}-${gap.hi.toFixed(2)}, swing ${swing.p.toFixed(2)}`,
+    };
+  }
+  return trades;
+}
+
+// ---------- Strategy 11: SLC = Structure (4H trend) + Level (5-min supply/demand) + Confirmation (stochastic) ----------
+// Structure: 4-hour swings. Higher high + higher low = uptrend (longs only); lower high + lower low = downtrend
+// (shorts only); anything else = consolidation (no trades).
+// Level: on the 5-min chart, the last candle before a sharp move (2+ candles in a row moving 2x the average
+// candle size). Supply above (shorts), demand below (longs).
+// Confirmation: while price is tapping the zone, the stochastic %K goes above 80 and crosses back below it
+// (shorts) / below 20 and back above it (longs). Enter at the next bar's open, stop 1 tick past the zone, 2R target.
+// "both" mode also allows a zone that was broken ONCE, then reclaimed, then retested.
+const SLC = {
+  htfMin: 240, swingK: 2, pushBars: 2, pushAtr: 2, maxZoneAtr: 1.5, expiryHours: 48,
+  confirmBars: 6, ob: 80, os: 20, maxStopAtr: 3, stopBufTicks: 1,
+  entryStart: '09:30', entryEnd: '15:30', flatTime: '15:55', maxTrades: 2,
+};
+function runSLC(bars, { rr, stochLen, mode }) {
+  const c5 = aggregate(bars, 5), h4 = aggregate(bars, SLC.htfMin);
+  const K = [], raw = [];
+  for (let i = 0; i < c5.length; i++) {                      // stochastic %K (n, 3) on 5-min candles
+    let hh = -Infinity, ll = Infinity;
+    for (let j = Math.max(0, i - stochLen + 1); j <= i; j++) { hh = Math.max(hh, c5[j].h); ll = Math.min(ll, c5[j].l); }
+    raw[i] = hh > ll ? 100 * (c5[i].c - ll) / (hh - ll) : 50;
+    K[i] = (raw[i] + (raw[i - 1] ?? raw[i]) + (raw[i - 2] ?? raw[i])) / 3;
+  }
+  const highs = [], lows = [];
+  const trend = () => {
+    if (highs.length < 2 || lows.length < 2) return 0;
+    const hh = highs.at(-1) > highs.at(-2), hl = lows.at(-1) > lows.at(-2);
+    return hh && hl ? 1 : !hh && !hl ? -1 : 0;
+  };
+  const sMin = toMins(SLC.entryStart), eMin = toMins(SLC.entryEnd), fMin = toMins(SLC.flatTime);
+  const trades = [];
+  let zones = [], pos = null, k = 0, k4 = 0, day = null, nT = 0;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+
+    // Structure: confirmed 4H swing points (2 candles each side)
+    while (k4 < h4.length && h4[k4].end <= b.t) {
+      const j = k4 - SLC.swingK;
+      if (j - SLC.swingK >= 0) {
+        let isH = true, isL = true;
+        for (let t = j - SLC.swingK; t <= j + SLC.swingK; t++) {
+          if (t === j) continue;
+          if (h4[t].h >= h4[j].h) isH = false;
+          if (h4[t].l <= h4[j].l) isL = false;
+        }
+        if (isH) highs.push(h4[j].h);
+        if (isL) lows.push(h4[j].l);
+      }
+      k4++;
+    }
+
+    // Levels + confirmation on each finished 5-min candle
+    let signal = null;
+    while (k < c5.length && c5[k].end <= b.t) {
+      const x = c5[k];
+      for (const z of zones) {
+        if (z.dead) continue;
+        if (x.end - z.created > SLC.expiryHours * 3600) { z.dead = true; continue; }
+        const d = z.dir;
+        const beyond = d === -1 ? x.c > z.hi : x.c < z.lo;       // closed through the zone (broken)
+        const back = d === -1 ? x.c < z.lo : x.c > z.hi;         // closed back on the trade side
+        const touch = d === -1 ? x.h >= z.lo : x.l <= z.hi;
+        if (z.state === 'fresh') {
+          if (beyond) { if (mode === 'both' && !z.brokenOnce) { z.state = 'broken'; z.brokenOnce = true; } else z.dead = true; }
+          else if (touch) { z.state = 'tapped'; z.touchK = k; }
+        } else if (z.state === 'tapped') {
+          if (beyond) z.dead = true;
+          else if (k - z.touchK > SLC.confirmBars) z.dead = true;
+        } else if (z.state === 'broken') {
+          if (back) z.state = 'reclaimed';
+        } else if (z.state === 'reclaimed') {
+          if (beyond) z.dead = true;                               // chopped through twice: no longer valid
+          else if (touch) { z.state = 'tapped'; z.touchK = k; z.retest = true; }
+        }
+        if (z.state === 'tapped' && !z.dead && k >= 1) {
+          const cross = d === -1 ? K[k - 1] > SLC.ob && K[k] <= SLC.ob : K[k - 1] < SLC.os && K[k] >= SLC.os;
+          if (cross && trend() === d) { signal = { z, x, k }; z.dead = true; }
+        }
+      }
+      zones = zones.filter(z => !z.dead);
+
+      // new zone: the candle right before a sharp move
+      const up = x.c > x.o, dn = x.c < x.o;
+      if ((up || dn) && k > SLC.swingK + 14) {
+        const d = up ? 1 : -1;
+        let s = k;
+        while (s - 1 >= 0 && (d === 1 ? c5[s - 1].c > c5[s - 1].o : c5[s - 1].c < c5[s - 1].o)) s--;
+        const runLen = k - s + 1, move = (x.c - c5[s].o) * d, base = c5[s - 1];
+        const q = runLen >= SLC.pushBars && move >= SLC.pushAtr * x.atr;
+        const qPrev = runLen - 1 >= SLC.pushBars && (c5[k - 1].c - c5[s].o) * d >= SLC.pushAtr * c5[k - 1].atr;
+        if (q && !qPrev && base && base.h > base.l && base.h - base.l <= SLC.maxZoneAtr * x.atr) {
+          zones.push({ dir: d, lo: base.l, hi: base.h, created: x.end, state: 'fresh', baseTime: nyTime(base.t) });
+        }
+      }
+      k++;
+    }
+
+    // Entry at this bar's open after a confirmed signal
+    const inEntry = b.ny.mins >= sMin && b.ny.mins < eMin;
+    if (signal && !pos && inEntry && nT < SLC.maxTrades) {
+      const { z, x } = signal, d = z.dir;
+      const entry = b.o + d * SLIP;
+      const stop = roundTick(d === 1 ? z.lo - SLC.stopBufTicks * TICK : z.hi + SLC.stopBufTicks * TICK);
+      const risk = (entry - stop) * d;
+      if (risk > 0 && risk <= SLC.maxStopAtr * x.atr) {
+        nT++;
+        const xt = nyTime(x.t);
+        pos = {
+          dir: d, entryIdx: i, date: b.ny.date, signalTime: `${xt.date} ${xt.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+          entry, stop, target: roundTick(entry + d * rr * risk),
+          setup: `${d === 1 ? 'demand' : 'supply'} zone ${z.lo.toFixed(2)}-${z.hi.toFixed(2)} from ${z.baseTime.date} ${z.baseTime.hm}${z.retest ? ' (break & retest)' : ''}, 4H ${d === 1 ? 'uptrend' : 'downtrend'}, stoch ${K[signal.k].toFixed(0)}`,
+        };
+      }
+    }
+
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+  }
+  return trades;
+}
+
+// ---------- Strategy 12: Morning scalp - break & retest of a key level, 9:30-11:00 only ----------
+// Levels: first 5-min candle high/low (9:30-9:35), premarket high/low (4:00-9:30), or previous-day
+// regular-session high/low. Signals on the trading chart itself (1m or 5m candles).
+// Break = a candle closes beyond the level (a break that already happened premarket counts).
+// Retest = a later candle comes back to the level, holds it, and closes in the trade direction
+// (or leaves a rejection wick of at least half its size). Enter next candle; stop just past the
+// retest candle / level; fixed R target. One trade per day. Entries until 11:00, flat at 12:00.
+const SCALP = { retestTolAtr: 0.25, maxStopAtr: 3, entryEnd: '11:00', flatTime: '12:00' };
+function runSCALP(bars, { rr, level }) {
+  const tf = INTERVAL === '1m' ? 1 : 5;
+  const cs = aggregate(bars, tf);                          // same candles, plus average candle size
+  for (const x of cs) x.ny = nyTime(x.t);
+  const byDate = new Map(), order = [];
+  for (const b of bars) {
+    let d = byDate.get(b.ny.date);
+    if (!d) { d = { rth: null, pm: null, or5: null }; byDate.set(b.ny.date, d); order.push(b.ny.date); }
+    const upd = key => { const r = d[key]; d[key] = r ? { h: Math.max(r.h, b.h), l: Math.min(r.l, b.l) } : { h: b.h, l: b.l }; };
+    if (b.ny.mins >= RTH_OPEN && b.ny.mins < 960) upd('rth');
+    if (b.ny.mins >= 240 && b.ny.mins < RTH_OPEN) upd('pm');
+    if (b.ny.mins >= RTH_OPEN && b.ny.mins < RTH_OPEN + 5) upd('or5');
+  }
+  let prevRth = null;
+  for (const dt of order) { const d = byDate.get(dt); d.prevRth = prevRth; if (d.rth) prevRth = d.rth; }
+
+  const readyMin = level === 'or5' ? RTH_OPEN + 5 : RTH_OPEN;
+  const eMin = toMins(SCALP.entryEnd), fMin = toMins(SCALP.flatTime);
+  const trades = [];
+  let k = 0, pos = null, dayOf = null, done = false, phase = 'wait', dir = 0, lvl = null, L = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    while (k < cs.length && cs[k].end <= b.t) {
+      const x = cs[k++];
+      if (x.ny.date !== dayOf) { dayOf = x.ny.date; done = false; phase = 'wait'; dir = 0; lvl = null; L = null; }
+      if (done || pos || x.ny.mins < readyMin || x.ny.mins >= eMin || k < 20) continue;
+      if (!L) {
+        const d = byDate.get(dayOf);
+        L = level === 'pdh' ? d.prevRth : d[level];
+        if (!L) { done = true; continue; }
+        // a break that already happened before the level was ready (e.g. premarket above the prev-day high)
+        const before = cs[k - 2];
+        if (before && before.c > L.h) { phase = 'broke'; dir = 1; lvl = L.h; }
+        else if (before && before.c < L.l) { phase = 'broke'; dir = -1; lvl = L.l; }
+      }
+      const range = x.h - x.l;
+      if (range <= 0) continue;
+      if (phase === 'broke') {
+        if (dir === 1 ? x.c < lvl : x.c > lvl) { phase = 'wait'; dir = 0; }   // closed back through: break failed
+        else {
+          const tol = SCALP.retestTolAtr * x.atr;
+          const touched = dir === 1 ? x.l <= lvl + tol : x.h >= lvl - tol;
+          const wick = dir === 1 ? Math.min(x.o, x.c) - x.l : x.h - Math.max(x.o, x.c);
+          const good = dir === 1 ? (x.c > x.o || wick >= range / 2) : (x.c < x.o || wick >= range / 2);
+          if (touched && good) {
+            done = true;
+            const entry = b.o + dir * SLIP;
+            const stop = roundTick(dir === 1 ? Math.min(x.l, lvl) - TICK : Math.max(x.h, lvl) + TICK);
+            const risk = (entry - stop) * dir;
+            if (risk > 0 && risk <= SCALP.maxStopAtr * x.atr && i + 1 < bars.length) {
+              pos = {
+                dir, entryIdx: i, date: b.ny.date,
+                signalTime: `${x.ny.date} ${x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+                entry, stop, target: roundTick(entry + dir * rr * risk),
+                setup: `retest of ${level} ${dir === 1 ? 'high' : 'low'} ${lvl.toFixed(2)} (range ${L.l.toFixed(2)}-${L.h.toFixed(2)})`,
+              };
+            }
+            continue;
+          }
+        }
+      }
+      if (phase === 'wait') {
+        if (x.c > L.h) { phase = 'broke'; dir = 1; lvl = L.h; }
+        else if (x.c < L.l) { phase = 'broke'; dir = -1; lvl = L.l; }
+      }
+    }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+  }
+  return trades;
+}
+
+// ---------- Strategy 13: Engulfing candle with the trend (200 EMA + RSI 50) ----------
+// Signals on the trading chart itself (1m or 5m candles).
+// Long: close above the 200 EMA, RSI(14) above 50, and a bullish engulfing candle (previous candle red,
+// this one green, opens at/below the previous close and closes above the previous open).
+// Enter at the close (next bar's open). Stop = 2x the engulfing candle's high-low length below entry.
+// Target = rr x that risk. Shorts (optional) are the mirror image.
+const ENG = { emaLen: 200, rsiLen: 14, stopMult: 2, entryStart: '09:30', entryEnd: '15:30', flatTime: '15:55', maxTrades: 3 };
+function runENG(bars, { rr, side }) {
+  const kE = 2 / (ENG.emaLen + 1);
+  let ema = null, ag = 0, al = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    ema = ema == null ? b.c : b.c * kE + ema * (1 - kE);
+    b.engEma = ema;
+    if (i > 0) {
+      const ch = b.c - bars[i - 1].c, g = Math.max(ch, 0), l = Math.max(-ch, 0);
+      if (i <= ENG.rsiLen) { ag += g / ENG.rsiLen; al += l / ENG.rsiLen; }
+      else { ag = (ag * (ENG.rsiLen - 1) + g) / ENG.rsiLen; al = (al * (ENG.rsiLen - 1) + l) / ENG.rsiLen; }
+    }
+    b.rsi = i < ENG.rsiLen ? 50 : al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  const sMin = toMins(ENG.entryStart), eMin = toMins(ENG.entryEnd), fMin = toMins(ENG.flatTime);
+  const trades = [];
+  let pos = null, day = null, nT = 0;
+  for (let i = ENG.emaLen * 3; i < bars.length; i++) {
+    const b = bars[i], p = bars[i - 1];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+    if (pos || i + 1 >= bars.length || nT >= ENG.maxTrades) continue;
+    if (b.ny.mins < sMin || b.ny.mins >= eMin || p.ny.date !== b.ny.date) continue;
+    const bullEng = p.c < p.o && b.c > b.o && b.o <= p.c && b.c > p.o;
+    const bearEng = p.c > p.o && b.c < b.o && b.o >= p.c && b.c < p.o;
+    let dir = 0;
+    if (bullEng && b.c > b.engEma && b.rsi > 50) dir = 1;
+    else if (side === 'both' && bearEng && b.c < b.engEma && b.rsi < 50) dir = -1;
+    if (!dir) continue;
+    const len = b.h - b.l;
+    if (len <= 0) continue;
+    const nb = bars[i + 1], entry = nb.o + dir * SLIP;
+    const stop = roundTick(entry - dir * ENG.stopMult * len);
+    const risk = (entry - stop) * dir;
+    if (risk <= 0) continue;
+    nT++;
+    pos = openPos(bars, i, dir, stop, roundTick(entry + dir * rr * risk), {
+      setup: `${dir === 1 ? 'bullish' : 'bearish'} engulfing, candle ${len.toFixed(2)} pts, ema ${b.engEma.toFixed(2)}, rsi ${b.rsi.toFixed(0)}`,
+    });
+  }
+  return trades;
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -981,7 +1357,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
+const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -992,7 +1368,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : runON(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : STRATEGY === 'cs' ? runCS(bars, v) : STRATEGY === 'slc' ? runSLC(bars, v) : STRATEGY === 'scalp' ? runSCALP(bars, v) : STRATEGY === 'eng' ? runENG(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
