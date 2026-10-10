@@ -43,6 +43,11 @@ jobs:
             echo '```'
             node mes_backtest.mjs mnq sd since 2026-10-12
             echo '```'
+            echo
+            echo "## 3AM-range liquidity sweep - MES (watch row 4: sweep, R:R 1.5) - started 2026-10-12"
+            echo '```'
+            node mes_backtest.mjs ldn since 2026-10-12
+            echo '```'
           } > "$OUT" 2>&1
           node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too
           # Bank MNQ (micro Nasdaq) data too, so it's available for future tests (not reported yet)

@@ -9,6 +9,7 @@
 //   ... mnq                                -> run on MNQ (micro Nasdaq) instead of MES, e.g. "node mes_backtest.mjs mnq orb 1m"
 //   node mes_backtest.mjs sd               -> Supply & demand zones + 200 EMA, tested on 30/15/5-min charts
 //   node mes_backtest.mjs onr              -> Overnight high/low break & retest (5-min signals)
+//   node mes_backtest.mjs ldn              -> 3AM-9:30 range: breakout / retest / liquidity sweep
 //
 // Every run SAVES the downloaded bars to a local file (bars_5m.json / bars_1m.json) and merges
 // new data into it. Yahoo only serves ~30 days of 1-minute data, so this cache is what lets a
@@ -26,7 +27,7 @@ const MARKETS = {
 };
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -72,6 +73,8 @@ const VARIANTS = STRATEGY === 'ha'
   ? [1, 1.5, 2].flatMap(rr => [15, 30].map(orMin => ({ rr, orMin, label: `${orMin}-min range` })))
   : STRATEGY === 'sd'
   ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
+  : STRATEGY === 'ldn'
+  ? ['breakout', 'retest', 'sweep'].flatMap(mode => [1.5, 2].map(rr => ({ rr, mode, label: mode })))
   : [1.5, 2, 3].flatMap(rr => ['tight', 'close'].map(stopMode => ({ rr, trend: 'ema', stopMode, label: stopMode === 'tight' ? 'stop: touch below candle' : 'stop: 5m CLOSE thru level' })));
 
 // ---------- Data (with local cache) ----------
@@ -492,6 +495,106 @@ function runON(bars, { rr, trend, stopMode = 'tight' }) {
   return trades;
 }
 
+// ---------- Strategy 5: London-session (3 AM - 9:30 AM) range: breakout / retest / liquidity sweep ----------
+function runLDN(bars, { rr, mode }) {
+  const c5 = aggregate(bars, 5);
+  for (const x of c5) x.ny = nyTime(x.t);
+  const sMin = toMins('09:30'), eMin = toMins('15:00'), fMin = toMins('15:55'), rStart = toMins('03:00');
+  const trades = [];
+  let k = 0, pos = null;
+  let rH = -Infinity, rL = Infinity, rDate = null;           // range being built (3:00-9:30)
+  let lvlH = null, lvlL = null, lvlDate = null;              // frozen range for today's session
+  let dayOf = null, done = false, phase = 'wait', dir = 0, level = null;
+  let swUp = null, swDn = null, swUpDead = false, swDnDead = false;
+
+  const open = (i, b, x, d, stop, setup) => {
+    done = true;
+    const entry = b.o + d * SLIP;
+    stop = roundTick(stop);
+    const risk = (entry - stop) * d;
+    if (risk <= 0 || risk > ONR.maxStopAtr * x.atr || i + 1 >= bars.length) return;
+    pos = {
+      dir: d, entryIdx: i, date: b.ny.date,
+      signalTime: `${x.ny.date} ${x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+      entry, stop, target: roundTick(entry + d * rr * risk),
+      setup: `${setup} (range ${lvlL.toFixed(2)}-${lvlH.toFixed(2)})`,
+    };
+  };
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.mins >= rStart && b.ny.mins < RTH_OPEN) {
+      if (rDate !== b.ny.date) { rDate = b.ny.date; rH = -Infinity; rL = Infinity; }
+      rH = Math.max(rH, b.h); rL = Math.min(rL, b.l);
+    }
+    if (b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && lvlDate !== b.ny.date) {
+      lvlDate = b.ny.date;
+      const ok = rDate === b.ny.date && Number.isFinite(rH);
+      lvlH = ok ? rH : null; lvlL = ok ? rL : null;
+    }
+
+    while (k < c5.length && c5[k].end <= b.t) {
+      const x = c5[k++];
+      if (x.ny.date !== dayOf) {
+        dayOf = x.ny.date; done = false; phase = 'wait'; dir = 0; level = null;
+        swUp = swDn = null; swUpDead = swDnDead = false;
+      }
+      const inEntry = x.ny.mins >= sMin && x.ny.mins < eMin && x.ny.date === lvlDate;
+      if (!inEntry || done || pos || lvlH == null || k < 20) continue;
+      const range = x.h - x.l;
+      if (range <= 0) continue;
+      const strongUp = x.c > lvlH && x.c > x.o && (x.c - x.l) >= range * 2 / 3 && range >= x.atr;
+      const strongDn = x.c < lvlL && x.c < x.o && (x.h - x.c) >= range * 2 / 3 && range >= x.atr;
+
+      if (mode === 'breakout') {
+        if (strongUp) open(i, b, x, 1, x.l - TICK, `breakout above 3AM high ${lvlH.toFixed(2)}`);
+        else if (strongDn) open(i, b, x, -1, x.h + TICK, `breakout below 3AM low ${lvlL.toFixed(2)}`);
+        continue;
+      }
+
+      if (mode === 'retest') {
+        if (phase === 'broke') {
+          if (dir === 1 ? x.c < level : x.c > level) { phase = 'wait'; dir = 0; }
+          else {
+            const tol = ONR.retestTolAtr * x.atr;
+            const touched = dir === 1 ? x.l <= level + tol : x.h >= level - tol;
+            const wick = dir === 1 ? Math.min(x.o, x.c) - x.l : x.h - Math.max(x.o, x.c);
+            const bullish = dir === 1 ? (x.c > x.o || wick >= range / 2) : (x.c < x.o || wick >= range / 2);
+            if (touched && bullish && (dir === 1 ? x.c > level : x.c < level)) {
+              open(i, b, x, dir, dir === 1 ? Math.min(x.l, level) - TICK : Math.max(x.h, level) + TICK,
+                `retest of 3AM ${dir === 1 ? 'high' : 'low'} ${level.toFixed(2)}`);
+              continue;
+            }
+          }
+        }
+        if (phase === 'wait') {
+          if (strongUp) { phase = 'broke'; dir = 1; level = lvlH; }
+          else if (strongDn) { phase = 'broke'; dir = -1; level = lvlL; }
+        }
+        continue;
+      }
+
+      // mode === 'sweep': poke beyond a level, then close back inside within 3 candles -> fade it
+      if (!swUpDead && x.h > lvlH) {
+        if (!swUp) swUp = { n: 0, ext: x.h }; else swUp.ext = Math.max(swUp.ext, x.h);
+        if (x.c < lvlH) { open(i, b, x, -1, swUp.ext + TICK, `sweep of 3AM high ${lvlH.toFixed(2)}, reclaimed`); continue; }
+        if (++swUp.n > 3) swUpDead = true;                     // held above too long: a real breakout, not a sweep
+      }
+      if (!swDnDead && x.l < lvlL) {
+        if (!swDn) swDn = { n: 0, ext: x.l }; else swDn.ext = Math.min(swDn.ext, x.l);
+        if (x.c > lvlL) { open(i, b, x, 1, swDn.ext - TICK, `sweep of 3AM low ${lvlL.toFixed(2)}, reclaimed`); continue; }
+        if (++swDn.n > 3) swDnDead = true;
+      }
+    }
+
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+  }
+  return trades;
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -546,7 +649,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : 'Overnight high/low break & retest (5-min)';
+const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -557,7 +660,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : runON(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : STRATEGY === 'ldn' ? runLDN(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
