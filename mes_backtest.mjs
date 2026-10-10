@@ -8,6 +8,7 @@
 //   ... since 2026-10-09                   -> only count trades from that date on (forward test)
 //   ... mnq                                -> run on MNQ (micro Nasdaq) instead of MES, e.g. "node mes_backtest.mjs mnq orb 1m"
 //   node mes_backtest.mjs sd               -> Supply & demand zones + 200 EMA, tested on 30/15/5-min charts
+//   node mes_backtest.mjs onr              -> Overnight high/low break & retest (5-min signals)
 //
 // Every run SAVES the downloaded bars to a local file (bars_5m.json / bars_1m.json) and merges
 // new data into it. Yahoo only serves ~30 days of 1-minute data, so this cache is what lets a
@@ -25,7 +26,7 @@ const MARKETS = {
 };
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -69,7 +70,9 @@ const VARIANTS = STRATEGY === 'ha'
   ? [1, 1.5, 2].flatMap(rr => ['09:30', '09:45'].map(start => ({ rr, start, label: `start ${start}` })))
   : STRATEGY === 'orb'
   ? [1, 1.5, 2].flatMap(rr => [15, 30].map(orMin => ({ rr, orMin, label: `${orMin}-min range` })))
-  : [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })));
+  : STRATEGY === 'sd'
+  ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
+  : [1.5, 2, 3].flatMap(rr => ['tight', 'close'].map(stopMode => ({ rr, trend: 'ema', stopMode, label: stopMode === 'tight' ? 'stop: touch below candle' : 'stop: 5m CLOSE thru level' })));
 
 // ---------- Data (with local cache) ----------
 async function fetchChart(sym, query) {
@@ -399,6 +402,96 @@ function runSD(bars, { rr, tf }) {
   return trades;
 }
 
+// ---------- Strategy 4: Overnight high/low break & retest ----------
+// Overnight range = high/low from 4 PM to 9:30 AM ET (measured on the base bars).
+// Signals on 5-minute candles; trades simulated on the base bars (1m or 5m).
+const ONR = {
+  tfMin: 5, retestTolAtr: 0.25, wickPct: 50, maxStopAtr: 3, stopBufTicks: 1,
+  entryStart: '09:30', entryEnd: '15:00', flatTime: '15:55',
+};
+function runON(bars, { rr, trend, stopMode = 'tight' }) {
+  const c5 = aggregate(bars, ONR.tfMin);
+  for (const x of c5) x.ny = nyTime(x.t);
+  const sMin = toMins(ONR.entryStart), eMin = toMins(ONR.entryEnd), fMin = toMins(ONR.flatTime);
+  const trades = [];
+  let k = 0, pos = null;
+  let onH = -Infinity, onL = Infinity, onStartDate = null;   // overnight range being built
+  let lvlH = null, lvlL = null, rangeDate = null;            // frozen range for today's session
+  let phase = 'wait', dir = 0, level = null, done = false, dayOf = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    // build the overnight range: starts at the first bar at/after 4 PM, runs until 9:30
+    if (b.ny.mins >= 960 && onStartDate !== b.ny.date) { onStartDate = b.ny.date; onH = -Infinity; onL = Infinity; }
+    if ((b.ny.mins >= 960 || b.ny.mins < RTH_OPEN) && onStartDate) { onH = Math.max(onH, b.h); onL = Math.min(onL, b.l); }
+    if (b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && rangeDate !== b.ny.date) {
+      rangeDate = b.ny.date;
+      lvlH = Number.isFinite(onH) ? onH : null; lvlL = Number.isFinite(onL) ? onL : null;
+      onStartDate = null;                                     // next overnight starts at 4 PM
+    }
+
+    // process 5-minute candles that finished before this bar starts
+    while (k < c5.length && c5[k].end <= b.t) {
+      const x = c5[k++];
+      // "close" stop mode (his rule): a 5-min candle CLOSING back through the level -> exit at the next bar
+      if (pos && pos.stopMode === 'close' && x.end > pos.entryT &&
+          (pos.dir === 1 ? x.c < pos.level : x.c > pos.level)) pos.exitNext = true;
+      if (x.ny.date !== dayOf) { dayOf = x.ny.date; phase = 'wait'; dir = 0; level = null; done = false; }
+      const inEntry = x.ny.mins >= sMin && x.ny.mins < eMin && x.ny.date === rangeDate;
+      if (!inEntry || done || pos || lvlH == null || k < SD.emaLen) continue;
+      const range = x.h - x.l;
+      if (range <= 0) continue;
+
+      if (phase === 'broke') {
+        // closed back through the level before a valid retest -> setup failed, start over
+        if (dir === 1 ? x.c < level : x.c > level) { phase = 'wait'; dir = 0; }
+        else {
+          const tol = ONR.retestTolAtr * x.atr;
+          const touched = dir === 1 ? x.l <= level + tol : x.h >= level - tol;
+          const wick = dir === 1 ? Math.min(x.o, x.c) - x.l : x.h - Math.max(x.o, x.c);
+          const bullish = dir === 1 ? (x.c > x.o || wick >= range * ONR.wickPct / 100) : (x.c < x.o || wick >= range * ONR.wickPct / 100);
+          const closesRight = dir === 1 ? x.c > level : x.c < level;
+          if (touched && bullish && closesRight) {
+            done = true;                                     // one trade per day
+            const entry = b.o + dir * SLIP;
+            const stop = roundTick(dir === 1 ? Math.min(x.l, level) - ONR.stopBufTicks * TICK : Math.max(x.h, level) + ONR.stopBufTicks * TICK);
+            const risk = (entry - stop) * dir;
+            if (risk <= 0 || risk > ONR.maxStopAtr * x.atr || i + 1 >= bars.length) continue;
+            // targets are always measured from the tight stop distance, so both stop modes are comparable.
+            // In "close" mode the hard stop becomes a wider emergency stop: 1 average candle beyond the level.
+            const emergency = roundTick(dir === 1 ? Math.min(stop, level - x.atr) : Math.max(stop, level + x.atr));
+            pos = {
+              dir, entryIdx: i, date: b.ny.date, entryT: b.t, level, stopMode, exitNext: false,
+              signalTime: `${x.ny.date} ${x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+              entry, stop: stopMode === 'close' ? emergency : stop, target: roundTick(entry + dir * rr * risk),
+              setup: `${dir === 1 ? 'retest of overnight HIGH' : 'retest of overnight LOW'} ${level.toFixed(2)} (range ${lvlL.toFixed(2)}-${lvlH.toFixed(2)})`,
+            };
+            continue;
+          }
+        }
+      }
+      if (phase === 'wait') {
+        const strongUp = x.c > lvlH && x.c > x.o && (x.c - x.l) >= range * 2 / 3 && range >= x.atr;
+        const strongDn = x.c < lvlL && x.c < x.o && (x.h - x.c) >= range * 2 / 3 && range >= x.atr;
+        const okUp = trend === 'none' || x.c > x.ema, okDn = trend === 'none' || x.c < x.ema;
+        if (strongUp && okUp) { phase = 'broke'; dir = 1; level = lvlH; }
+        else if (strongDn && okDn) { phase = 'broke'; dir = -1; level = lvlL; }
+      }
+    }
+
+    if (pos && i >= pos.entryIdx) {
+      let t = null;
+      if (pos.exitNext) {
+        const exit = b.o - pos.dir * SLIP;
+        const pnl = (exit - pos.entry) * pos.dir * POINT_VALUE - COMMISSION_RT;
+        t = { ...pos, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'closed back through level', ambiguous: false, pnl, pnlBest: pnl };
+      } else t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+  }
+  return trades;
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -453,7 +546,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : 'Supply & demand zones (200 EMA)';
+const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -464,7 +557,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : runSD(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
