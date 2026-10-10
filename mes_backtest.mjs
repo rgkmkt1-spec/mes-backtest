@@ -12,6 +12,8 @@
 //   node mes_backtest.mjs ldn              -> 3AM-9:30 range: breakout / retest / liquidity sweep
 //   node mes_backtest.mjs orr              -> 30-min opening range (9:30-10:00): breakout / retest / sweep
 //   node mes_backtest.mjs h2               -> Two-legged pullback to 21 EMA (5-min chart; add 1m for 1-min chart)
+//   node mes_backtest.mjs pdh              -> Previous-day high/low break & retest with daily 9/21 EMA trend filter
+//   node mes_backtest.mjs fbr              -> First-bar reversal: fade a big 9:30 bar once price crosses its midpoint
 //   node mes_backtest.mjs dorb             -> Displacement ORB (9:30-9:45) + demand/supply zone entry + London/NY session filter
 //
 // Every run SAVES the downloaded bars to a local file (bars_5m.json / bars_1m.json) and merges
@@ -28,9 +30,17 @@ const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
 };
+const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh'];
+const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
+if (unknown.length) {
+  console.log(`\nUnknown option: ${unknown.join(', ')}`);
+  console.log(`This version of the script knows: ${KNOWN.filter(k => !['mes', '5m', 'since'].includes(k)).join(', ')}`);
+  console.log('If you expected a newer strategy, the new mes_backtest.mjs is not in this folder yet.\n');
+  process.exit(1);
+}
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -78,6 +88,10 @@ const VARIANTS = STRATEGY === 'ha'
   ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
   : STRATEGY === 'ldn'
   ? ['breakout', 'retest', 'sweep'].flatMap(mode => [1.5, 2].map(rr => ({ rr, mode, label: mode })))
+  : STRATEGY === 'pdh'
+  ? [1.5, 2].flatMap(rr => ['on', 'off'].map(filter => ({ rr, filter, label: filter === 'on' ? 'with daily trend filter' : 'no trend filter' })))
+  : STRATEGY === 'fbr'
+  ? [1, 1.5, 2].map(rr => ({ rr, label: 'first-bar reversal' }))
   : STRATEGY === 'dorb'
   ? [1.5, 2].flatMap(rr => ['on', 'off'].map(filter => ({ rr, filter, label: filter === 'on' ? 'with session filter' : 'no session filter' })))
   : STRATEGY === 'h2'
@@ -783,6 +797,136 @@ function runDORB(bars, { rr, filter }) {
   return trades;
 }
 
+// ---------- Strategy 8: First-bar reversal (fade a big 9:30 bar once price crosses back past its midpoint) ----------
+const FBR = { bigMult: 1.2, lookbackDays: 10, signalEnd: '09:45', flatTime: '15:55' };
+function runFBR(bars, { rr }) {
+  const sigEnd = toMins(FBR.signalEnd), fMin = toMins(FBR.flatTime), fbEnd = RTH_OPEN + 5;
+  const trades = [], hist = [];
+  let pos = null, day = null, fb = null, done = false, big = false;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i], m = b.ny.mins;
+    if (b.ny.date !== day) {
+      if (fb) hist.push(fb.h - fb.l);                         // remember yesterday's opening-bar size
+      day = b.ny.date; fb = null; done = false; big = false;
+    }
+    // build the 9:30-9:35 opening bar from the base bars
+    if (m >= RTH_OPEN && m < fbEnd) {
+      if (!fb) fb = { o: b.o, h: b.h, l: b.l, c: b.c };
+      else { fb.h = Math.max(fb.h, b.h); fb.l = Math.min(fb.l, b.l); fb.c = b.c; }
+    }
+    if (m === fbEnd && fb && hist.length >= FBR.lookbackDays) {
+      const recent = hist.slice(-FBR.lookbackDays), avg = recent.reduce((a, x) => a + x, 0) / recent.length;
+      big = (fb.h - fb.l) >= FBR.bigMult * avg && fb.c !== fb.o;
+      fb.avg = avg;
+    }
+
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+
+    // signal window: the next two 5-min bars (9:35-9:45)
+    if (big && !done && !pos && m >= fbEnd && m < sigEnd && b.ny.date === day) {
+      const d = fb.c < fb.o ? 1 : -1;                          // fade the opening bar's direction
+      const mid = (fb.h + fb.l) / 2;
+      const crossed = d === 1 ? b.h >= mid : b.l <= mid;
+      if (crossed) {
+        done = true;
+        const entry = (d === 1 ? Math.max(b.o, mid) : Math.min(b.o, mid)) + d * SLIP;
+        const stop = roundTick(d === 1 ? fb.l - TICK : fb.h + TICK);
+        const risk = (entry - stop) * d;
+        if (risk <= 0 || i + 1 >= bars.length) continue;
+        const p0 = {
+          dir: d, entryIdx: i + 1, date: b.ny.date,
+          signalTime: `${b.ny.date} 09:30`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+          entry, stop, target: roundTick(entry + d * rr * risk),
+          setup: `opening bar ${fb.o.toFixed(2)}->${fb.c.toFixed(2)} range ${(fb.h - fb.l).toFixed(2)} (10-day avg ${fb.avg.toFixed(2)}), midpoint ${mid.toFixed(2)}`,
+        };
+        if (d === 1 ? b.l <= stop : b.h >= stop) {
+          const exit = stop - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+          trades.push({ ...p0, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (entry bar)', ambiguous: false, pnl, pnlBest: pnl });
+        } else pos = p0;
+      }
+    }
+  }
+  return trades;
+}
+
+// ---------- Strategy 9: Previous-day high/low break & retest with a daily 9/21 EMA trend filter ----------
+function runPDH(bars, { rr, filter }) {
+  // daily regular-session stats (9:30-16:00) from the base bars
+  const days = [], byDate = new Map();
+  for (const b of bars) {
+    if (b.ny.mins < RTH_OPEN || b.ny.mins >= 960) continue;
+    let d = byDate.get(b.ny.date);
+    if (!d) { d = { date: b.ny.date, h: b.h, l: b.l, c: b.c }; byDate.set(b.ny.date, d); days.push(d); }
+    else { d.h = Math.max(d.h, b.h); d.l = Math.min(d.l, b.l); d.c = b.c; }
+  }
+  let e9 = null, e21 = null;
+  days.forEach((d, i) => {
+    e9 = e9 == null ? d.c : d.c * (2 / 10) + e9 * (8 / 10);
+    e21 = e21 == null ? d.c : d.c * (2 / 22) + e21 * (20 / 22);
+    d.trend = i < 20 ? null : (d.c > e9 && d.c > e21 ? 1 : d.c < e9 && d.c < e21 ? -1 : 0);
+    d.prev = days[i - 1] || null;
+  });
+
+  const c5 = aggregate(bars, 5);
+  for (const x of c5) x.ny = nyTime(x.t);
+  const eMin = toMins('15:00'), fMin = toMins('15:55');
+  const trades = [];
+  let k = 0, pos = null, dayOf = null, done = false, phase = 'wait', dir = 0, level = null, today = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    while (k < c5.length && c5[k].end <= b.t) {
+      const x = c5[k++];
+      if (x.ny.date !== dayOf) { dayOf = x.ny.date; done = false; phase = 'wait'; dir = 0; level = null; today = byDate.get(dayOf) || null; }
+      const p = today && today.prev;
+      if (!p || p.trend == null || done || pos || x.ny.mins < RTH_OPEN || x.ny.mins >= eMin || k < 20) continue;
+      const lvlH = p.h, lvlL = p.l, range = x.h - x.l;
+      if (range <= 0) continue;
+      const okUp = filter === 'off' || p.trend === 1, okDn = filter === 'off' || p.trend === -1;
+
+      if (phase === 'broke') {
+        if (dir === 1 ? x.c < level : x.c > level) { phase = 'wait'; dir = 0; }
+        else {
+          const tol = ONR.retestTolAtr * x.atr;
+          const touched = dir === 1 ? x.l <= level + tol : x.h >= level - tol;
+          const wick = dir === 1 ? Math.min(x.o, x.c) - x.l : x.h - Math.max(x.o, x.c);
+          const good = dir === 1 ? (x.c > x.o || wick >= range / 2) : (x.c < x.o || wick >= range / 2);
+          if (touched && good && (dir === 1 ? x.c > level : x.c < level)) {
+            done = true;
+            const entry = b.o + dir * SLIP;
+            const stop = roundTick(dir === 1 ? Math.min(x.l, level) - TICK : Math.max(x.h, level) + TICK);
+            const risk = (entry - stop) * dir;
+            if (risk > 0 && risk <= ONR.maxStopAtr * x.atr && i + 1 < bars.length) {
+              pos = {
+                dir, entryIdx: i, date: b.ny.date,
+                signalTime: `${x.ny.date} ${x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+                entry, stop, target: roundTick(entry + dir * rr * risk),
+                setup: `retest of prev-day ${dir === 1 ? 'HIGH' : 'LOW'} ${level.toFixed(2)}; daily trend ${p.trend === 1 ? 'up' : p.trend === -1 ? 'down' : 'neutral'}`,
+              };
+            }
+            continue;
+          }
+        }
+      }
+      if (phase === 'wait') {
+        const strongUp = x.c > lvlH && x.c > x.o && (x.c - x.l) >= range * 2 / 3 && range >= x.atr;
+        const strongDn = x.c < lvlL && x.c < x.o && (x.h - x.c) >= range * 2 / 3 && range >= x.atr;
+        if (strongUp && okUp) { phase = 'broke'; dir = 1; level = lvlH; }
+        else if (strongDn && okDn) { phase = 'broke'; dir = -1; level = lvlL; }
+      }
+    }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+  }
+  return trades;
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -837,7 +981,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
+const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -848,7 +992,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : runON(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
