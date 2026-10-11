@@ -128,6 +128,18 @@ jobs:
             node mes_backtest.mjs 1m hr1 filt since 2026-10-12
             echo '```'
             echo
+            echo "# Exit tracks (locked 2026-10-10, started 2026-10-12) - compare the watched exit row to the 'fixed' row"
+            echo
+            echo "## First-candle FVG day entry + trailing stop - MNQ (watch exit: trail)"
+            echo '```'
+            node mes_backtest.mjs mnq fvgo exits since 2026-10-12
+            echo '```'
+            echo
+            echo "## First-candle FVG day entry + trailing stop - MES (watch exit: trail)"
+            echo '```'
+            node mes_backtest.mjs fvgo exits since 2026-10-12
+            echo '```'
+            echo
             echo "_Pass rules (set in advance): 30+ trades, profit factor above 1.3, positive on BOTH markets._"
           } > "$OUT" 2>&1
           node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too

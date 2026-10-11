@@ -31,7 +31,7 @@ const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
 };
-const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt'];
+const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt', 'exits'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -43,6 +43,7 @@ const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
 const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : args.includes('orb5') ? 'orb5' : args.includes('flag') ? 'flag' : args.includes('box') ? 'box' : args.includes('ema3') ? 'ema3' : args.includes('hr1') ? 'hr1' : args.includes('sw15') ? 'sw15' : args.includes('macd') ? 'macd' : args.includes('one') ? 'one' : args.includes('vap') ? 'vap' : 'ha';
 const FILT = args.includes('filt');
+const EXITS = args.includes('exits');
 // Forward-test (locked) row for each strategy, used by the filter test
 const FWD_ROW = { ha: 0, orb: 4, sd: 1, ldn: 4, pdh: 3, fvgo: 2, hr1: 0 };
 const sinceIdx = args.indexOf('since');
@@ -2693,7 +2694,7 @@ function runHR1(bars, { rr, be, cur }) {
         const o = order; order = null;
         if (curOk && risk > 0 && risk <= ORB.maxStopPts) {
           nT++;
-          const p0 = { dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: o.sig, entryTime: `${b.ny.date} ${b.ny.hm}`, entry, stop: o.sl, risk,
+          const p0 = { dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: o.sig, entryTime: `${b.ny.date} ${b.ny.hm}`, entry, stop: o.sl, stop0: o.sl, risk,
             target: roundTick(entry + d * rr * risk), setup: `prev hour ${d === 1 ? 'green' : 'red'}, counter-leg failed, break of swing ${o.trig.toFixed(2)}` };
           if (d === 1 ? b.l <= o.sl : b.h >= o.sl) {
             const exit = o.sl - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
@@ -3093,6 +3094,63 @@ function runFilterTest() {
   console.log('without cutting the trade count so far that the result is just luck.\n');
 }
 
+// ---------- Exit test (node mes_backtest.mjs <strategy> exits) ----------
+// Same entries as the locked forward-test row; only the way out changes. 1R = distance from entry to the
+// original stop. Worst case is assumed whenever one bar touches both the stop and a profit level.
+//   fixed  : the strategy's own exit (as forward-tested)
+//   be     : same target, stop moves to entry once price reaches +1R
+//   trim   : half off at +1R, stop to entry, other half to the original target
+//   runner : half off at +1R, stop to entry, other half trails 1R behind the best price (no target)
+//   trail  : no target; once +1R is reached the stop trails 1R behind the best price
+//   hold   : no target, original stop, close at the strategy's end-of-day time
+// "Half" positions assume 2 contracts; results are shown per 1 contract ($2 commission per contract).
+const EXIT_FLAT = { ha: () => HA.flatTime, orb: () => ORB.flatTime, sd: () => SD.flatTime, ldn: () => '15:55', pdh: () => '15:55', fvgo: () => FVGO.flatTime, hr1: () => HR1.flatTime };
+function simExit(bars, t, mode, fMin) {
+  if (mode === 'fixed' || /fill bar/.test(t.reason)) return t.pnl;
+  const d = t.dir, e = t.entry, s0 = t.stop0 ?? t.stop, R = (e - s0) * d;
+  if (!(R > 0) || t.entryIdx == null) return t.pnl;
+  let stop = s0, size = 1, got = 0, best = e, trimmed = false;
+  const tgt = mode === 'be' || mode === 'trim' ? t.target : null;
+  const trimAt = mode === 'trim' || mode === 'runner' ? e + d * R : null;
+  const reach = (b, lvl) => d === 1 ? b.h >= lvl : b.l <= lvl;
+  let i = t.entryIdx;
+  for (; i < bars.length && size > 0; i++) {
+    const b = bars[i];
+    if (b.ny.mins >= fMin || b.ny.date !== t.date || b.ny.mins < RTH_OPEN) { got += size * (b.o - d * SLIP - e) * d; size = 0; break; }
+    if (d === 1 ? b.o <= stop : b.o >= stop) { got += size * (b.o - d * SLIP - e) * d; size = 0; break; }
+    if (d === 1 ? b.l <= stop : b.h >= stop) { got += size * (stop - d * SLIP - e) * d; size = 0; break; }
+    if (trimAt != null && !trimmed && reach(b, trimAt)) { got += 0.5 * R; size = 0.5; trimmed = true; stop = e; }
+    if (tgt != null && reach(b, tgt)) { got += size * (tgt - e) * d; size = 0; break; }
+    best = d === 1 ? Math.max(best, b.h) : Math.min(best, b.l);
+    const up = (best - e) * d;
+    if (mode === 'be' && up >= R) stop = d === 1 ? Math.max(stop, e) : Math.min(stop, e);
+    if ((mode === 'runner' && trimmed) || (mode === 'trail' && up >= R)) {
+      const ts = roundTick(best - d * R); stop = d === 1 ? Math.max(stop, ts) : Math.min(stop, ts);
+    }
+  }
+  if (size > 0) got += size * (bars[bars.length - 1].c - e) * d;
+  return got * POINT_VALUE - COMMISSION_RT;
+}
+function runExitTest() {
+  const v = VARIANTS[FWD_ROW[STRATEGY]];
+  const run = STRATEGY === 'ha' ? runHA : STRATEGY === 'orb' ? runORB : STRATEGY === 'sd' ? runSD : STRATEGY === 'ldn' ? runLDN : STRATEGY === 'pdh' ? runPDH : STRATEGY === 'fvgo' ? runFVGO : runHR1;
+  let tr = run(bars, v);
+  if (SINCE) tr = tr.filter(t => t.date >= SINCE);
+  const fMin = toMins(EXIT_FLAT[STRATEGY]());
+  console.log(`Exit test on the forward-test row: ${v.label}${v.rr != null ? ` (R:R ${v.rr})` : ''}\n`);
+  const labels = { fixed: 'strategy exit (as forward-tested)', be: 'same target, break-even at +1R', trim: 'half off at +1R, rest to target', runner: 'half off at +1R, rest trails 1R', trail: 'no target, trail 1R after +1R', hold: 'no target, hold to end of day' };
+  const rows = [];
+  for (const [m, label] of Object.entries(labels)) {
+    const res = tr.map(t => ({ ...t, pnl: simExit(bars, t, m, fMin) }));
+    const st = stats(res);
+    const best = res.length ? Math.max(...res.map(t => t.pnl)) : 0;
+    rows.push({ Exit: m, What: label, Trades: st.n, 'Win %': st.n ? (100 * st.wins / st.n).toFixed(0) : '-', 'Net $': st.net.toFixed(2),
+      'Profit factor': st.pf === Infinity ? 'inf' : st.pf.toFixed(2), 'Max DD $': st.dd.toFixed(2), 'Best trade $': best.toFixed(2) });
+  }
+  console.table(rows);
+  console.log('An exit is only worth switching to if it beats the strategy exit on BOTH markets (and 1m + 5m where tested).\n');
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -3156,6 +3214,10 @@ console.log(`      ${bars[0].ny.date} to ${bars.at(-1).ny.date} (NY time), ${rth
 if (SINCE) console.log(`FORWARD TEST: only counting trades from ${SINCE} on (${rthDays(SINCE)} trading days so far)`);
 console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on entries and stops\n`);
 
+if (EXITS) {
+  if (!(STRATEGY in FWD_ROW)) { console.log(`The exit test is for the forward-test strategies: ${Object.keys(FWD_ROW).join(', ')}`); process.exit(1); }
+  runExitTest(); process.exit(0);
+}
 if (FILT) {
   if (!(STRATEGY in FWD_ROW)) { console.log(`The filter test is for the forward-test strategies: ${Object.keys(FWD_ROW).join(', ')}`); process.exit(1); }
   runFilterTest(); process.exit(0);
