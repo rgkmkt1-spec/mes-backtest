@@ -31,7 +31,7 @@ const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
 };
-const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp'];
+const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -41,7 +41,7 @@ if (unknown.length) {
 }
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -89,6 +89,8 @@ const VARIANTS = STRATEGY === 'ha'
   ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
   : STRATEGY === 'ldn'
   ? ['breakout', 'retest', 'sweep'].flatMap(mode => [1.5, 2].map(rr => ({ rr, mode, label: mode })))
+  : STRATEGY === 'tl'
+  ? [5, 15].flatMap(tf => ['trail', 2].map(ex => ({ rr: ex === 'trail' ? 'trail' : ex, ex, tf, label: `${tf}-min trendlines, ${ex === 'trail' ? 'exit only on safety-line break (her rule)' : 'safety-line trail + 2R target'}` })))
   : STRATEGY === 'orbp'
   ? ['top', 'mid', 'auto'].flatMap(lvl => [2, 3].map(rr => ({ rr, lvl, label: lvl === 'auto' ? 'pullback level by breakout strength (his rule)' : `pullback to range ${lvl === 'top' ? 'edge' : 'midline'}` })))
   : STRATEGY === 'e50'
@@ -2302,6 +2304,89 @@ function runORBP(bars, { rr, lvl }) {
   return trades;
 }
 
+// ---------- Strategy 26: Trendlines - action line / safety line ----------
+// Lines are drawn automatically from swing points on tf-minute candles (a swing = a high/low with
+// 3 candles on each side). Upward line: from an earlier swing low to the newest higher swing low,
+// with no candle low poking below it in between. Downward line: same with lower swing highs.
+// The newest valid line of each type is the active one (closest to price).
+// ACTION: a candle CLOSES through a line -> trade in the direction of the break
+// (close below the upward line -> short; close above the downward line -> long).
+// SAFETY: the opposite line. Stop sits 1 tick beyond it and trails along it every candle.
+// No target in her rule ("trail"); variant "2" adds a 2R target. Skip if the stop is wider than the
+// ORB max-stop limit (12 pts MES, scaled for MNQ). Entries 9:30-15:00, max 3 a day, flat 15:55.
+const TL = { k: 3, lookPivots: 8, entryEnd: '15:00', flatTime: '15:55', maxTrades: 3 };
+function runTL(bars, { ex, tf }) {
+  const tfx = Math.max(tf, INTERVAL === '1m' ? 1 : 5);
+  const C = aggregate(bars, tfx);
+  for (const x of C) x.ny = nyTime(x.t);
+  const K = TL.k, eMin = toMins(TL.entryEnd), fMin = toMins(TL.flatTime);
+  const lows = [], highs = [];
+  let up = null, dn = null;                       // active lines {i1,p1,i2,p2}
+  const val = (ln, idx) => ln.p1 + (ln.p2 - ln.p1) * (idx - ln.i1) / (ln.i2 - ln.i1);
+  function build(piv, d) {                         // d = 1 upward (lows), -1 downward (highs)
+    const B = piv[piv.length - 1];
+    for (let a = piv.length - 2; a >= Math.max(0, piv.length - 1 - TL.lookPivots); a--) {
+      const A = piv[a];
+      if (d === 1 ? A.p >= B.p : A.p <= B.p) continue;           // must slope the right way
+      const ln = { i1: A.i, p1: A.p, i2: B.i, p2: B.p };
+      let ok = true;
+      for (let j = A.i + 1; j < B.i && ok; j++) if (d === 1 ? C[j].l < val(ln, j) - 1e-9 : C[j].h > val(ln, j) + 1e-9) ok = false;
+      for (let j = B.i + 1; j <= B.i + K && ok; j++) if (d === 1 ? C[j].c < val(ln, j) : C[j].c > val(ln, j)) ok = false;
+      if (ok) return ln;
+    }
+    return null;
+  }
+  const trades = [];
+  let k = 0, pos = null, day = null, nT = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+    let signal = null;
+    while (k < C.length && C[k].end <= b.t) {
+      const idx = k++, x = C[idx];
+      // breaks of the active lines
+      let brk = 0;
+      if (up && x.c < val(up, idx)) { brk = -1; up = null; }
+      else if (dn && x.c > val(dn, idx)) { brk = 1; dn = null; }
+      // confirm swing points K candles back
+      const pI = idx - K;
+      if (pI >= K) {
+        const p = C[pI]; let isL = true, isH = true;
+        for (let j = pI - K; j <= pI + K; j++) { if (j === pI) continue; if (C[j].l <= p.l) isL = false; if (C[j].h >= p.h) isH = false; }
+        if (isL) { lows.push({ i: pI, p: p.l }); const ln = build(lows, 1); if (ln) up = ln; }
+        if (isH) { highs.push({ i: pI, p: p.h }); const ln = build(highs, -1); if (ln) dn = ln; }
+      }
+      // trail an open position's stop along its safety line
+      if (pos && pos.safety) {
+        const sl = pos.safety, v = val(sl, idx + 1), ns = roundTick(v - pos.dir * TICK);
+        if (pos.dir === 1 ? ns > pos.stop : ns < pos.stop) pos.stop = ns;
+      }
+      if (brk) {
+        const safety = brk === 1 ? up : dn;      // opposite line
+        if (safety) signal = { d: brk, x, idx, safety: { ...safety } };
+      }
+    }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+    if (signal && !pos && nT < TL.maxTrades && b.ny.mins >= RTH_OPEN && b.ny.mins < eMin && signal.x.ny.date === b.ny.date) {
+      const { d, safety, idx } = signal, entry = b.o + d * SLIP;
+      const stop = roundTick(val(safety, idx + 1) - d * TICK), risk = (entry - stop) * d;
+      if (risk > 0 && risk <= ORB.maxStopPts) {
+        nT++;
+        const target = ex === 'trail' ? d * 1e9 : roundTick(entry + d * ex * risk);
+        pos = { dir: d, entryIdx: i, date: b.ny.date, signalTime: `${signal.x.ny.date} ${signal.x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+          entry, stop, target, safety,
+          setup: `${tfx}-min close ${d === 1 ? 'above downward' : 'below upward'} line, safety line at ${val(safety, idx + 1).toFixed(2)}` };
+        const t = manageExit(b, pos, fMin);
+        if (t) { trades.push(t); pos = null; }
+      }
+    }
+  }
+  return trades.map(t => { const { safety, ...rest } = t; if (rest.target === 1e9 || rest.target === -1e9) rest.target = 0; return rest; });
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -2356,7 +2441,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'orbp' ? '15-min opening range: 5-min close outside, limit entry on pullback into the range' : STRATEGY === 'e50' ? '50 EMA cross, 2-candle pullback, break of swing high, chandelier stop' : STRATEGY === 'fvgo' ? `First-candle range break with a fair value gap, then gap retest (${INTERVAL} data)` : STRATEGY === 'ifvg' ? `IFVG model: 15-min gap key level, highest-timeframe (1-5 min) gap inversion entry, 9:30-11 (${INTERVAL} data)` : STRATEGY === 'snk' ? 'Sneaky pivot: 15-min open candle into prev-day/swing level, sneaky candle, break of it' : STRATEGY === 'asia' ? 'Sweep & flip: Asian range (8 PM-3 AM) swept at London open, 15-min candles, trades 3-6 AM' : STRATEGY === 'orev' ? `Morning reversal: fast move with 2+ FVGs, low/high at 9:35-10:15, higher low + break (${INTERVAL} entries)` : STRATEGY === 'vwap' ? 'VWAP + 9 EMA: test of both lines, clean candle through them, break of its low/high (5-min)' : STRATEGY === 'htf' ? `Higher-timeframe zone break & retest, ${INTERVAL} structure-break entry` : STRATEGY === 'p3' ? 'Power of Three: sweep of prev-day/London hi-lo after 9:30, reverse (5-min)' : STRATEGY === 'ema8' ? `8 EMA trend continuation (${INTERVAL} chart)` : STRATEGY === 'ovn' ? 'Overnight (6 PM-9:30) high/low break: retest or breakout, 2 contracts, trim + runner (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
+const stratName = STRATEGY === 'tl' ? 'Trendline action line / safety line (break one line, trail stop on the opposite line)' : STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'orbp' ? '15-min opening range: 5-min close outside, limit entry on pullback into the range' : STRATEGY === 'e50' ? '50 EMA cross, 2-candle pullback, break of swing high, chandelier stop' : STRATEGY === 'fvgo' ? `First-candle range break with a fair value gap, then gap retest (${INTERVAL} data)` : STRATEGY === 'ifvg' ? `IFVG model: 15-min gap key level, highest-timeframe (1-5 min) gap inversion entry, 9:30-11 (${INTERVAL} data)` : STRATEGY === 'snk' ? 'Sneaky pivot: 15-min open candle into prev-day/swing level, sneaky candle, break of it' : STRATEGY === 'asia' ? 'Sweep & flip: Asian range (8 PM-3 AM) swept at London open, 15-min candles, trades 3-6 AM' : STRATEGY === 'orev' ? `Morning reversal: fast move with 2+ FVGs, low/high at 9:35-10:15, higher low + break (${INTERVAL} entries)` : STRATEGY === 'vwap' ? 'VWAP + 9 EMA: test of both lines, clean candle through them, break of its low/high (5-min)' : STRATEGY === 'htf' ? `Higher-timeframe zone break & retest, ${INTERVAL} structure-break entry` : STRATEGY === 'p3' ? 'Power of Three: sweep of prev-day/London hi-lo after 9:30, reverse (5-min)' : STRATEGY === 'ema8' ? `8 EMA trend continuation (${INTERVAL} chart)` : STRATEGY === 'ovn' ? 'Overnight (6 PM-9:30) high/low break: retest or breakout, 2 contracts, trim + runner (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -2367,7 +2452,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : STRATEGY === 'cs' ? runCS(bars, v) : STRATEGY === 'slc' ? runSLC(bars, v) : STRATEGY === 'scalp' ? runSCALP(bars, v) : STRATEGY === 'eng' ? runENG(bars, v) : STRATEGY === 'ovn' ? runOVN(bars, v) : STRATEGY === 'ema8' ? runEMA8(bars, v) : STRATEGY === 'p3' ? runP3(bars, v) : STRATEGY === 'htf' ? runHTF(bars, v) : STRATEGY === 'vwap' ? runVWAP(bars, v) : STRATEGY === 'orev' ? runOREV(bars, v) : STRATEGY === 'asia' ? runASIA(bars, v) : STRATEGY === 'snk' ? runSNK(bars, v) : STRATEGY === 'ifvg' ? runIFVG(bars, v) : STRATEGY === 'fvgo' ? runFVGO(bars, v) : STRATEGY === 'e50' ? runE50(bars, v) : STRATEGY === 'orbp' ? runORBP(bars, v) : runON(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : STRATEGY === 'cs' ? runCS(bars, v) : STRATEGY === 'slc' ? runSLC(bars, v) : STRATEGY === 'scalp' ? runSCALP(bars, v) : STRATEGY === 'eng' ? runENG(bars, v) : STRATEGY === 'ovn' ? runOVN(bars, v) : STRATEGY === 'ema8' ? runEMA8(bars, v) : STRATEGY === 'p3' ? runP3(bars, v) : STRATEGY === 'htf' ? runHTF(bars, v) : STRATEGY === 'vwap' ? runVWAP(bars, v) : STRATEGY === 'orev' ? runOREV(bars, v) : STRATEGY === 'asia' ? runASIA(bars, v) : STRATEGY === 'snk' ? runSNK(bars, v) : STRATEGY === 'ifvg' ? runIFVG(bars, v) : STRATEGY === 'fvgo' ? runFVGO(bars, v) : STRATEGY === 'e50' ? runE50(bars, v) : STRATEGY === 'orbp' ? runORBP(bars, v) : STRATEGY === 'tl' ? runTL(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
