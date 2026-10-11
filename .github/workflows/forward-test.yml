@@ -96,6 +96,38 @@ jobs:
             node mes_backtest.mjs 1m hr1 since 2026-10-12
             echo '```'
             echo
+            echo "# Filter tracks (locked 2026-10-10, started 2026-10-12) - compare the watched filter row to the 'none' row"
+            echo
+            echo "## ORB + 200 EMA trend + skip choppy - MES, 1-min (watch filter: ema+chop)"
+            echo '```'
+            node mes_backtest.mjs orb 1m filt since 2026-10-12
+            echo '```'
+            echo
+            echo "## ORB + 200 EMA trend + skip choppy - MNQ, 1-min (watch filter: ema+chop)"
+            echo '```'
+            node mes_backtest.mjs mnq orb 1m filt since 2026-10-12
+            echo '```'
+            echo
+            echo "## 3AM-range sweep + VWAP side - MES (watch filter: vwap)"
+            echo '```'
+            node mes_backtest.mjs ldn filt since 2026-10-12
+            echo '```'
+            echo
+            echo "## 3AM-range sweep + VWAP side - MNQ (watch filter: vwap)"
+            echo '```'
+            node mes_backtest.mjs mnq ldn filt since 2026-10-12
+            echo '```'
+            echo
+            echo "## Previous 1-hour candle + 200 EMA trend - MNQ, 1-min (watch filter: ema)"
+            echo '```'
+            node mes_backtest.mjs mnq 1m hr1 filt since 2026-10-12
+            echo '```'
+            echo
+            echo "## Previous 1-hour candle + 200 EMA trend - MES, 1-min (watch filter: ema)"
+            echo '```'
+            node mes_backtest.mjs 1m hr1 filt since 2026-10-12
+            echo '```'
+            echo
             echo "_Pass rules (set in advance): 30+ trades, profit factor above 1.3, positive on BOTH markets._"
           } > "$OUT" 2>&1
           node mes_backtest.mjs orb > /dev/null 2>&1 || true   # keep the 5-minute data file growing too
