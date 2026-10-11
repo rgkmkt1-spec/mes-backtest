@@ -31,7 +31,7 @@ const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
 };
-const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5'];
+const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -41,7 +41,7 @@ if (unknown.length) {
 }
 const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
-const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : args.includes('orb5') ? 'orb5' : 'ha';
+const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : args.includes('orb5') ? 'orb5' : args.includes('flag') ? 'flag' : args.includes('box') ? 'box' : args.includes('ema3') ? 'ema3' : args.includes('hr1') ? 'hr1' : 'ha';
 const sinceIdx = args.indexOf('since');
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : null;
 if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
@@ -89,6 +89,17 @@ const VARIANTS = STRATEGY === 'ha'
   ? [30, 15, 5].flatMap(tf => ['push', 2, 3].map(rr => ({ rr, tf, label: `${tf}-min chart` })))
   : STRATEGY === 'ldn'
   ? ['breakout', 'retest', 'sweep'].flatMap(mode => [1.5, 2].map(rr => ({ rr, mode, label: mode })))
+  : STRATEGY === 'hr1'
+  ? [{ rr: 2, be: true, cur: true, label: '2R, break-even at 1.5R, current hour must agree (his rules)' },
+     { rr: 2, be: false, cur: true, label: '2R, no break-even move' },
+     { rr: 1.5, be: false, cur: true, label: '1.5R, no break-even move' },
+     { rr: 2, be: true, cur: false, label: '2R + break-even, no current-hour check' }]
+  : STRATEGY === 'ema3'
+  ? [5, 15].flatMap(tf => ['ema', 'swing'].map(stopAt => ({ rr: 1.5, tf, stopAt, label: `${tf}-min chart, stop ${stopAt === 'ema' ? 'below 30 EMA' : 'below pullback swing low'}` })))
+  : STRATEGY === 'box'
+  ? ['mid', 'far'].flatMap(tgt => [0.05, 0.1].map(buf => ({ rr: tgt === 'mid' ? 'mid' : 'edge', tgt, buf, label: `target ${tgt === 'mid' ? 'midline' : 'other side of box'}, stop ${buf * 100}% of box past the edge` })))
+  : STRATEGY === 'flag'
+  ? ['ema', 'any'].flatMap(f => [2, 3].map(rr => ({ rr, f, label: f === 'ema' ? 'pullback must touch 9 EMA (his rule)' : 'any pullback (no EMA touch needed)' })))
   : STRATEGY === 'orb5'
   ? ['ema', 'none'].flatMap(f => [1, 2].map(rr => ({ rr, f, label: f === 'ema' ? 'with 9/21 EMA trend filter (his setup)' : 'no EMA filter' })))
   : STRATEGY === 'tl'
@@ -2434,6 +2445,279 @@ function runORB5(bars, { rr, f }) {
   return trades;
 }
 
+// ---------- Strategy 28: Bull/bear flag (impulse run + pullback + break of the prior candle) ----------
+// Chart = the data interval (1m or 5m). Impulse: 4+ candles in a row that each close in the trend
+// direction and push past the prior candle's high (bull) / low (bear). Then a pullback (flag): every
+// candle that fails to break the prior high arms a buy-stop 1 tick above its high, stop 1 tick below
+// its low. Entry when price trades through. "ema" = the pullback must have touched the 9 EMA first.
+// Flag is dead after 10 pullback candles or a close beyond the start of the impulse.
+// Target rr x risk. 9:30-15:00 entries, max 5 trades a day, flat 15:55. Skip if stop > ORB max.
+const FLAG = { minRun: 4, maxPull: 10, entryEnd: '15:00', flatTime: '15:55', maxTrades: 5 };
+function runFLAG(bars, { rr, f }) {
+  const tf = INTERVAL === '1m' ? 1 : 5;
+  const C = aggregate(bars, tf);
+  const k9 = 2 / 10; let e9 = null;
+  for (const x of C) { x.ny = nyTime(x.t); e9 = e9 == null ? x.c : x.c * k9 + e9 * (1 - k9); x.e9 = e9; }
+  const eMin = toMins(FLAG.entryEnd), fMin = toMins(FLAG.flatTime);
+  const mk = () => ({ run: 0, runStart: null, phase: 'none', pulls: 0, touched: false, origin: null, trig: null, stop: null });
+  const S = { 1: mk(), [-1]: mk() };
+  const trades = [];
+  let k = 0, pos = null, day = null, nT = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+    // update states on each closed candle
+    while (k < C.length && C[k].end <= b.t) {
+      const j = k++, x = C[j], p = C[j - 1];
+      if (!p) continue;
+      for (const d of [1, -1]) {
+        const s = S[d];
+        const cont = d === 1 ? (x.c > x.o && x.h > p.h && x.c > p.c) : (x.c < x.o && x.l < p.l && x.c < p.c);
+        if (s.phase === 'pull') {
+          s.pulls++;
+          if ((d === 1 ? x.c < s.origin : x.c > s.origin) || s.pulls > FLAG.maxPull) { Object.assign(s, mk()); }
+          else { s.trig = d === 1 ? x.h + TICK : x.l - TICK; s.stop = roundTick(d === 1 ? x.l - TICK : x.h + TICK);
+                 if (d === 1 ? x.l <= x.e9 : x.h >= x.e9) s.touched = true; }
+        }
+        if (s.phase !== 'pull') {
+          if (cont) { if (s.run === 0) s.runStart = d === 1 ? x.l : x.h; s.run++; }
+          else {
+            if (s.run >= FLAG.minRun) {
+              Object.assign(s, { phase: 'pull', pulls: 1, origin: s.runStart, touched: d === 1 ? x.l <= x.e9 : x.h >= x.e9,
+                trig: d === 1 ? x.h + TICK : x.l - TICK, stop: roundTick(d === 1 ? x.l - TICK : x.h + TICK), run: 0 });
+            } else { s.run = 0; }
+          }
+        }
+        s.armedAt = x;
+      }
+    }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+    if (pos || nT >= FLAG.maxTrades || b.ny.mins < RTH_OPEN || b.ny.mins >= eMin) continue;
+    for (const d of [1, -1]) {
+      const s = S[d];
+      if (s.phase !== 'pull' || s.trig == null || (f === 'ema' && !s.touched)) continue;
+      if (s.armedAt.ny.date !== b.ny.date) continue;
+      if (!(d === 1 ? b.h >= s.trig : b.l <= s.trig)) continue;
+      const trig = roundTick(s.trig), entry = (d === 1 ? Math.max(b.o, trig) : Math.min(b.o, trig)) + d * SLIP;
+      const stop = s.stop, risk = (entry - stop) * d;
+      Object.assign(s, mk()); S[-d].phase === 'pull' && Object.assign(S[-d], mk());
+      if (risk <= 0 || risk > ORB.maxStopPts) break;
+      nT++;
+      const p0 = { dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: `${s.armedAt.ny.date} ${s.armedAt.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+        entry, stop, target: roundTick(entry + d * rr * risk), setup: `${tf}-min ${d === 1 ? 'bull' : 'bear'} flag after 4+ candle run, break of prior candle` };
+      if (d === 1 ? b.l <= stop : b.h >= stop) {           // stop touched on the fill bar: count as a loss
+        const exit = stop - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+        trades.push({ ...p0, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (fill bar)', ambiguous: false, pnl, pnlBest: pnl });
+      } else pos = p0;
+      break;
+    }
+  }
+  return trades;
+}
+
+// ---------- Strategy 29: Box theory - fade the edges of the previous day's range ----------
+// Box = previous futures session (6 PM-5 PM) high/low, extended to include this session's overnight and
+// first 15 minutes (through 9:45) if price already went beyond it. From 9:45 to 15:30: sell limit at the top,
+// buy limit at the bottom. Stop = buf x box height past the edge (min 2 ticks). Target = midline ("mid")
+// or the other edge ("far"). Each edge traded at most once a day. Flat 15:55. Skip if stop > ORB max.
+const BOX = { entryEnd: '15:30', flatTime: '15:55' };
+function runBOX(bars, { tgt, buf }) {
+  const eMin = toMins(BOX.entryEnd), fMin = toMins(BOX.flatTime);
+  const trades = [];
+  let sess = null, prevH = null, prevL = null, curH = -Infinity, curL = Infinity, box = null, used = null, pos = null;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    const key = nyTime(b.t + 6 * 3600).date;                 // futures session: 6 PM belongs to the next day
+    if (key !== sess) {
+      if (sess !== null && Number.isFinite(curH)) { prevH = curH; prevL = curL; }
+      sess = key; curH = -Infinity; curL = Infinity; box = null; used = { 1: false, [-1]: false };
+    }
+    const preBox = b.ny.date === key && b.ny.mins >= RTH_OPEN + 15 && !box;
+    if (preBox && prevH != null) {
+      const top = Math.max(prevH, curH), bot = Math.min(prevL, curL);
+      box = { top, bot, mid: (top + bot) / 2, h: top - bot };
+    }
+    curH = Math.max(curH, b.h); curL = Math.min(curL, b.l);
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+    if (pos || !box || b.ny.date !== key || b.ny.mins < RTH_OPEN + 15 || b.ny.mins >= eMin) continue;
+    for (const d of [-1, 1]) {                              // -1 = sell at top, 1 = buy at bottom
+      if (used[d]) continue;
+      const edge = roundTick(d === -1 ? box.top : box.bot);
+      if (!(d === -1 ? b.h >= edge : b.l <= edge)) continue;
+      used[d] = true;
+      const off = Math.max(2 * TICK, roundTick(buf * box.h));
+      const stop = roundTick(edge - d * off);
+      if (d === -1 ? b.o >= stop : b.o <= stop) break;      // gapped through the stop: no trade
+      const entry = d === -1 ? Math.max(b.o, edge) : Math.min(b.o, edge);
+      const risk = (entry - stop) * d;
+      const target = roundTick(tgt === 'mid' ? box.mid : (d === -1 ? box.bot : box.top));
+      if (risk <= 0 || risk > ORB.maxStopPts || (target - entry) * d <= 0) break;
+      const p0 = { dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: `${b.ny.date} ${b.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+        entry, stop, target, setup: `box ${box.bot.toFixed(2)}-${box.top.toFixed(2)} (${box.h.toFixed(2)} pts), ${d === -1 ? 'sell top' : 'buy bottom'}` };
+      if (d === -1 ? b.h >= stop : b.l <= stop) {
+        const exit = stop - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+        trades.push({ ...p0, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (fill bar)', ambiguous: false, pnl, pnlBest: pnl });
+      } else pos = p0;
+      break;
+    }
+  }
+  return trades;
+}
+
+// ---------- Strategy 30: 9 / 30 / 200 EMA trend pullback ----------
+// Trend: close above (below) the 200 EMA. Pullback: 9 EMA crosses below (above) the 30 EMA; mark the swing high
+// (low) where the pullback started = highest high of the last 10 candles at the cross. Re-arm when the 9 crosses
+// back. Entry: a candle CLOSES beyond that swing while the 9 is back on the trend side and price is past the 200.
+// Stop: 1 tick beyond the 30 EMA ("ema") or the pullback's extreme ("swing"). Target 1.5R. 9:30-15:00, max 3/day.
+const EMA3 = { look: 10, entryEnd: '15:00', flatTime: '15:55', maxTrades: 3 };
+function runEMA3(bars, { rr, tf, stopAt }) {
+  const tfx = Math.max(tf, INTERVAL === '1m' ? 1 : 5);
+  const C = aggregate(bars, tfx);
+  const ks = [9, 30, 200].map(n => 2 / (n + 1)); let e = [null, null, null];
+  for (const x of C) { x.ny = nyTime(x.t); e = e.map((v, q) => v == null ? x.c : x.c * ks[q] + v * (1 - ks[q])); [x.e9, x.e30, x.e200] = e; }
+  const eMin = toMins(EMA3.entryEnd), fMin = toMins(EMA3.flatTime);
+  const S = { 1: { phase: 'none' }, [-1]: { phase: 'none' } };
+  const trades = [];
+  const diag = { hours: 0, inTrade: 0, maxTrades: 0, rth: 0, badStop: 0, tooWide: 0, wideSum: 0 };
+  let k = 0, pos = null, day = null, nT = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+    let signal = null;
+    while (k < C.length && C[k].end <= b.t) {
+      const j = k++, x = C[j], p = C[j - 1];
+      if (!p || j < 600) continue;
+      for (const d of [1, -1]) {
+        const s = S[d];
+        const trendOk = d === 1 ? x.c > x.e200 : x.c < x.e200;
+        if (!trendOk) { S[d] = { phase: 'none' }; continue; }
+        const against = d === 1 ? x.e9 < x.e30 : x.e9 > x.e30;
+        const wasAgainst = d === 1 ? p.e9 < p.e30 : p.e9 > p.e30;
+        if (against && !wasAgainst) {                       // pullback starts
+          let ext = d === 1 ? -Infinity : Infinity;
+          for (let q = Math.max(0, j - EMA3.look); q <= j; q++) ext = d === 1 ? Math.max(ext, C[q].h) : Math.min(ext, C[q].l);
+          const keep = s.phase === 'armed' || s.phase === 'pull';
+          S[d] = { phase: 'pull', swing: keep ? (d === 1 ? Math.max(s.swing, ext) : Math.min(s.swing, ext)) : ext,
+                   ext2: d === 1 ? x.l : x.h };
+          continue;
+        }
+        if (s.phase === 'pull') {
+          s.ext2 = d === 1 ? Math.min(s.ext2, x.l) : Math.max(s.ext2, x.h);
+          if (!against) s.phase = 'armed';
+        }
+        if (s.phase === 'armed' && !against && (d === 1 ? x.c > s.swing : x.c < s.swing)) {
+          signal = signal || { d, x, swing: s.swing, ext2: s.ext2 };
+          S[d] = { phase: 'none' };
+        }
+      }
+    }
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+    }
+    if (signal) {
+      const inHours = b.ny.mins >= RTH_OPEN && b.ny.mins < eMin && signal.x.ny.date === b.ny.date;
+      if (!inHours) diag.hours++; else if (pos) diag.inTrade++; else if (nT >= EMA3.maxTrades) diag.maxTrades++;
+    }
+    if (signal && !pos && nT < EMA3.maxTrades && b.ny.mins >= RTH_OPEN && b.ny.mins < eMin && signal.x.ny.date === b.ny.date) {
+      const { d, x } = signal, entry = b.o + d * SLIP;
+      const stop = roundTick((stopAt === 'ema' ? x.e30 : signal.ext2) - d * TICK), risk = (entry - stop) * d;
+      diag.rth++;
+      if (risk <= 0) diag.badStop++; else if (risk > ORB.maxStopPts) { diag.tooWide++; diag.wideSum += risk; }
+      if (risk > 0 && risk <= ORB.maxStopPts) {
+        nT++;
+        pos = { dir: d, entryIdx: i, date: b.ny.date, signalTime: `${x.ny.date} ${x.ny.hm}`, entryTime: `${b.ny.date} ${b.ny.hm}`,
+          entry, stop, target: roundTick(entry + d * rr * risk),
+          setup: `${tfx}-min: 9/30 pullback, close beyond swing ${signal.swing.toFixed(2)}, 200 EMA ${x.e200.toFixed(2)}` };
+        const t = manageExit(b, pos, fMin);
+        if (t) { trades.push(t); pos = null; }
+      }
+    }
+  }
+  console.log(`  [${tfx}-min, stop ${stopAt}] setups: ${diag.hours + diag.inTrade + diag.maxTrades + diag.rth} | outside 9:30-15:00: ${diag.hours} | already in a trade: ${diag.inTrade} | day limit: ${diag.maxTrades} | in hours: ${diag.rth} -> stop too wide (> ${ORB.maxStopPts} pts): ${diag.tooWide}${diag.tooWide ? ` (avg ${(diag.wideSum / diag.tooWide).toFixed(1)} pts)` : ''}, bad stop: ${diag.badStop}`);
+  return trades;
+}
+
+// ---------- Strategy 31: Previous 1-hour candle continuation ----------
+// Bias = color of the last completed clock-hour candle (red -> sells only, green -> buys only).
+// On the base chart (1m or 5m) find swing points (2 candles each side). For a SELL: the swings show an up-leg
+// (higher high + higher low) followed by a LOWER high. Sell stop 1 tick under the swing low before that lower
+// high; stop 1 tick above the lower high. "cur": the current hour's candle must also be red at the fill.
+// Target rr x risk; "be": stop moved to entry once price reaches 1.5R. Entries 9:30-15:30, max 5/day, flat 15:55.
+const HR1 = { k: 2, entryEnd: '15:30', flatTime: '15:55', maxTrades: 5 };
+function runHR1(bars, { rr, be, cur }) {
+  const eMin = toMins(HR1.entryEnd), fMin = toMins(HR1.flatTime), K = HR1.k;
+  const trades = [], piv = [];                         // confirmed swings: {type:'H'|'L', p, i}
+  let hourKey = null, hO = null, prevBias = 0, curO = null, order = null, pos = null, day = null, nT = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.ny.date !== day) { day = b.ny.date; nT = 0; }
+    const hk = `${b.ny.date} ${Math.floor(b.ny.mins / 60)}`;
+    if (hk !== hourKey) {
+      if (hourKey !== null && hO != null) prevBias = bars[i - 1].c > hO ? 1 : bars[i - 1].c < hO ? -1 : 0;
+      hourKey = hk; hO = b.o; curO = b.o;
+      if (order && order.d !== prevBias) order = null;
+    }
+    // manage open position
+    if (pos && i >= pos.entryIdx) {
+      const t = manageExit(b, pos, fMin);
+      if (t) { trades.push(t); pos = null; }
+      else if (be && !pos.beDone && (pos.dir === 1 ? b.h >= pos.entry + 1.5 * pos.risk : b.l <= pos.entry - 1.5 * pos.risk)) { pos.stop = roundTick(pos.entry); pos.beDone = true; }
+    }
+    // try to fill a pending stop order
+    if (order && !pos) {
+      const d = order.d;
+      if (d === 1 ? b.h >= order.stop + 0 && b.l <= order.stop : false) { /* never */ }
+      if (d === 1 ? b.l <= order.sl : b.h >= order.sl) order = null;           // invalidated before trigger
+      else if (b.ny.mins >= RTH_OPEN && b.ny.mins < eMin && nT < HR1.maxTrades && (d === 1 ? b.h >= order.trig : b.l <= order.trig)) {
+        const entry = (d === 1 ? Math.max(b.o, order.trig) : Math.min(b.o, order.trig)) + d * SLIP;
+        const curOk = !cur || (d === 1 ? entry > curO : entry < curO);
+        const risk = (entry - order.sl) * d;
+        const o = order; order = null;
+        if (curOk && risk > 0 && risk <= ORB.maxStopPts) {
+          nT++;
+          const p0 = { dir: d, entryIdx: i + 1, date: b.ny.date, signalTime: o.sig, entryTime: `${b.ny.date} ${b.ny.hm}`, entry, stop: o.sl, risk,
+            target: roundTick(entry + d * rr * risk), setup: `prev hour ${d === 1 ? 'green' : 'red'}, counter-leg failed, break of swing ${o.trig.toFixed(2)}` };
+          if (d === 1 ? b.l <= o.sl : b.h >= o.sl) {
+            const exit = o.sl - d * SLIP, pnl = (exit - entry) * d * POINT_VALUE - COMMISSION_RT;
+            trades.push({ ...p0, exitTime: `${b.ny.date} ${b.ny.hm}`, exit, reason: 'stop (fill bar)', ambiguous: false, pnl, pnlBest: pnl });
+          } else pos = p0;
+        }
+      }
+    }
+    // confirm a swing at i-K
+    const c = i - K;
+    if (c >= K) {
+      const x = bars[c]; let isH = true, isL = true;
+      for (let j = c - K; j <= c + K; j++) { if (j === c) continue; if (bars[j].h >= x.h) isH = false; if (bars[j].l <= x.l) isL = false; }
+      if (isH) piv.push({ t: 'H', p: x.h, i: c });
+      if (isL) piv.push({ t: 'L', p: x.l, i: c });
+      if ((isH || isL) && prevBias && !pos) {
+        const Hs = piv.filter(q => q.t === 'H').slice(-3), Ls = piv.filter(q => q.t === 'L').slice(-3);
+        const d = prevBias;
+        if (d === -1 && isH && Hs.length >= 3 && Ls.length >= 2) {
+          const [H0, H1, H2] = Hs; const lastL = Ls[Ls.length - 1], prevL = Ls[Ls.length - 2];
+          if (H1.p > H0.p && H2.p < H1.p && lastL.i > H1.i && lastL.i < H2.i && lastL.p > prevL.p)
+            order = { d, trig: roundTick(lastL.p - TICK), sl: roundTick(H2.p + TICK), sig: `${x.ny.date} ${x.ny.hm}` };
+        }
+        if (d === 1 && isL && Ls.length >= 3 && Hs.length >= 2) {
+          const [L0, L1, L2] = Ls; const lastH = Hs[Hs.length - 1], prevH = Hs[Hs.length - 2];
+          if (L1.p < L0.p && L2.p > L1.p && lastH.i > L1.i && lastH.i < L2.i && lastH.p < prevH.p)
+            order = { d, trig: roundTick(lastH.p + TICK), sl: roundTick(L2.p - TICK), sig: `${x.ny.date} ${x.ny.hm}` };
+        }
+      }
+      if (piv.length > 50) piv.splice(0, piv.length - 50);
+    }
+  }
+  return trades.map(t => { const { risk, beDone, ...r } = t; return r; });
+}
+
 function stats(trades, key = 'pnl') {
   let net = 0, gw = 0, gl = 0, wins = 0, peak = 0, dd = 0;
   for (const t of trades) {
@@ -2488,7 +2772,7 @@ if (MARKET !== MARKETS.mes) {
 if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
-const stratName = STRATEGY === 'orb5' ? '5-min opening range breakout (9:30 candle), 5-min close outside, optional 9/21 EMA filter' : STRATEGY === 'tl' ? 'Trendline action line / safety line (break one line, trail stop on the opposite line)' : STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'orbp' ? '15-min opening range: 5-min close outside, limit entry on pullback into the range' : STRATEGY === 'e50' ? '50 EMA cross, 2-candle pullback, break of swing high, chandelier stop' : STRATEGY === 'fvgo' ? `First-candle range break with a fair value gap, then gap retest (${INTERVAL} data)` : STRATEGY === 'ifvg' ? `IFVG model: 15-min gap key level, highest-timeframe (1-5 min) gap inversion entry, 9:30-11 (${INTERVAL} data)` : STRATEGY === 'snk' ? 'Sneaky pivot: 15-min open candle into prev-day/swing level, sneaky candle, break of it' : STRATEGY === 'asia' ? 'Sweep & flip: Asian range (8 PM-3 AM) swept at London open, 15-min candles, trades 3-6 AM' : STRATEGY === 'orev' ? `Morning reversal: fast move with 2+ FVGs, low/high at 9:35-10:15, higher low + break (${INTERVAL} entries)` : STRATEGY === 'vwap' ? 'VWAP + 9 EMA: test of both lines, clean candle through them, break of its low/high (5-min)' : STRATEGY === 'htf' ? `Higher-timeframe zone break & retest, ${INTERVAL} structure-break entry` : STRATEGY === 'p3' ? 'Power of Three: sweep of prev-day/London hi-lo after 9:30, reverse (5-min)' : STRATEGY === 'ema8' ? `8 EMA trend continuation (${INTERVAL} chart)` : STRATEGY === 'ovn' ? 'Overnight (6 PM-9:30) high/low break: retest or breakout, 2 contracts, trim + runner (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
+const stratName = STRATEGY === 'hr1' ? `Previous 1-hour candle bias + ${INTERVAL} counter-trend failure (lower high / higher low), break of swing` : STRATEGY === 'ema3' ? '9/30/200 EMA: 200 trend, 9-30 pullback cross and re-cross, close beyond pullback swing' : STRATEGY === 'box' ? 'Box theory: fade the previous day high/low (box extended by overnight + first 15 min)' : STRATEGY === 'flag' ? `Bull/bear flag: 4+ candle impulse, pullback, break of prior candle (${INTERVAL} chart)` : STRATEGY === 'orb5' ? '5-min opening range breakout (9:30 candle), 5-min close outside, optional 9/21 EMA filter' : STRATEGY === 'tl' ? 'Trendline action line / safety line (break one line, trail stop on the opposite line)' : STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'orbp' ? '15-min opening range: 5-min close outside, limit entry on pullback into the range' : STRATEGY === 'e50' ? '50 EMA cross, 2-candle pullback, break of swing high, chandelier stop' : STRATEGY === 'fvgo' ? `First-candle range break with a fair value gap, then gap retest (${INTERVAL} data)` : STRATEGY === 'ifvg' ? `IFVG model: 15-min gap key level, highest-timeframe (1-5 min) gap inversion entry, 9:30-11 (${INTERVAL} data)` : STRATEGY === 'snk' ? 'Sneaky pivot: 15-min open candle into prev-day/swing level, sneaky candle, break of it' : STRATEGY === 'asia' ? 'Sweep & flip: Asian range (8 PM-3 AM) swept at London open, 15-min candles, trades 3-6 AM' : STRATEGY === 'orev' ? `Morning reversal: fast move with 2+ FVGs, low/high at 9:35-10:15, higher low + break (${INTERVAL} entries)` : STRATEGY === 'vwap' ? 'VWAP + 9 EMA: test of both lines, clean candle through them, break of its low/high (5-min)' : STRATEGY === 'htf' ? `Higher-timeframe zone break & retest, ${INTERVAL} structure-break entry` : STRATEGY === 'p3' ? 'Power of Three: sweep of prev-day/London hi-lo after 9:30, reverse (5-min)' : STRATEGY === 'ema8' ? `8 EMA trend continuation (${INTERVAL} chart)` : STRATEGY === 'ovn' ? 'Overnight (6 PM-9:30) high/low break: retest or breakout, 2 contracts, trim + runner (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
 console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
@@ -2499,7 +2783,7 @@ console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on
 
 const rows = [], allTrades = [];
 for (const v of VARIANTS) {
-  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : STRATEGY === 'cs' ? runCS(bars, v) : STRATEGY === 'slc' ? runSLC(bars, v) : STRATEGY === 'scalp' ? runSCALP(bars, v) : STRATEGY === 'eng' ? runENG(bars, v) : STRATEGY === 'ovn' ? runOVN(bars, v) : STRATEGY === 'ema8' ? runEMA8(bars, v) : STRATEGY === 'p3' ? runP3(bars, v) : STRATEGY === 'htf' ? runHTF(bars, v) : STRATEGY === 'vwap' ? runVWAP(bars, v) : STRATEGY === 'orev' ? runOREV(bars, v) : STRATEGY === 'asia' ? runASIA(bars, v) : STRATEGY === 'snk' ? runSNK(bars, v) : STRATEGY === 'ifvg' ? runIFVG(bars, v) : STRATEGY === 'fvgo' ? runFVGO(bars, v) : STRATEGY === 'e50' ? runE50(bars, v) : STRATEGY === 'orbp' ? runORBP(bars, v) : STRATEGY === 'tl' ? runTL(bars, v) : STRATEGY === 'orb5' ? runORB5(bars, v) : runON(bars, v);
+  let tr = STRATEGY === 'ha' ? runHA(bars, v) : STRATEGY === 'orb' ? runORB(bars, v) : STRATEGY === 'sd' ? runSD(bars, v) : (STRATEGY === 'ldn' || STRATEGY === 'orr') ? runLDN(bars, v) : STRATEGY === 'h2' ? runH2(bars, v) : STRATEGY === 'dorb' ? runDORB(bars, v) : STRATEGY === 'fbr' ? runFBR(bars, v) : STRATEGY === 'pdh' ? runPDH(bars, v) : STRATEGY === 'cs' ? runCS(bars, v) : STRATEGY === 'slc' ? runSLC(bars, v) : STRATEGY === 'scalp' ? runSCALP(bars, v) : STRATEGY === 'eng' ? runENG(bars, v) : STRATEGY === 'ovn' ? runOVN(bars, v) : STRATEGY === 'ema8' ? runEMA8(bars, v) : STRATEGY === 'p3' ? runP3(bars, v) : STRATEGY === 'htf' ? runHTF(bars, v) : STRATEGY === 'vwap' ? runVWAP(bars, v) : STRATEGY === 'orev' ? runOREV(bars, v) : STRATEGY === 'asia' ? runASIA(bars, v) : STRATEGY === 'snk' ? runSNK(bars, v) : STRATEGY === 'ifvg' ? runIFVG(bars, v) : STRATEGY === 'fvgo' ? runFVGO(bars, v) : STRATEGY === 'e50' ? runE50(bars, v) : STRATEGY === 'orbp' ? runORBP(bars, v) : STRATEGY === 'tl' ? runTL(bars, v) : STRATEGY === 'orb5' ? runORB5(bars, v) : STRATEGY === 'flag' ? runFLAG(bars, v) : STRATEGY === 'box' ? runBOX(bars, v) : STRATEGY === 'ema3' ? runEMA3(bars, v) : STRATEGY === 'hr1' ? runHR1(bars, v) : runON(bars, v);
   if (SINCE) tr = tr.filter(t => t.date >= SINCE);
   const s = stats(tr), sb = stats(tr, 'pnlBest');
   rows.push({
