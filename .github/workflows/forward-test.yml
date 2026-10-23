@@ -2,7 +2,8 @@ name: MES Forward Test
 
 on:
   schedule:
-    - cron: '0 22 * * 5'   # Fridays 22:00 UTC = 6 PM New York (5 PM after clocks fall back)
+    - cron: '17 22 * * 5'  # Fridays 22:17 UTC = 6:17 PM New York (5:17 PM after clocks fall back); off the busy top of the hour
+    - cron: '17 14 * * 6'  # Backup: Saturdays 14:17 UTC = 10:17 AM New York, in case GitHub skips the Friday run
   workflow_dispatch:        # lets you run it manually from the Actions tab
 
 permissions:
