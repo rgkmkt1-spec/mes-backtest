@@ -30,8 +30,12 @@ const args = process.argv.slice(2).map(a => a.toLowerCase());
 const MARKETS = {
   mes: { name: 'MES (Micro E-mini S&P 500)', sym: 'MES=F', tick: 0.25, pointValue: 5, cachePrefix: 'bars_',     filePrefix: '' },
   mnq: { name: 'MNQ (Micro E-mini Nasdaq-100)', sym: 'MNQ=F', tick: 0.25, pointValue: 2, cachePrefix: 'bars_mnq_', filePrefix: 'mnq_' },
+  // ETFs for small accounts: fractional shares sized to ACCOUNT dollars, $0 commission, 1 cent slippage.
+  spy: { name: 'SPY (S&P 500 ETF)', sym: 'SPY', tick: 0.01, pointValue: 1, cachePrefix: 'bars_spy_', filePrefix: 'spy_', etf: true },
+  qqq: { name: 'QQQ (Nasdaq-100 ETF)', sym: 'QQQ', tick: 0.01, pointValue: 1, cachePrefix: 'bars_qqq_', filePrefix: 'qqq_', etf: true },
 };
-const KNOWN = ['mes', 'mnq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt', 'exits'];
+const ACCOUNT = +(process.env.ACCOUNT || 100);   // ETF position size in dollars (fractional shares)
+const KNOWN = ['mes', 'mnq', 'spy', 'qqq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt', 'exits'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -39,7 +43,7 @@ if (unknown.length) {
   console.log('If you expected a newer strategy, the new mes_backtest.mjs is not in this folder yet.\n');
   process.exit(1);
 }
-const MARKET = args.includes('mnq') ? MARKETS.mnq : MARKETS.mes;
+const MARKET = args.includes('mnq') ? MARKETS.mnq : args.includes('spy') ? MARKETS.spy : args.includes('qqq') ? MARKETS.qqq : MARKETS.mes;
 const INTERVAL = args.includes('1m') ? '1m' : '5m';
 const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : args.includes('orb5') ? 'orb5' : args.includes('flag') ? 'flag' : args.includes('box') ? 'box' : args.includes('ema3') ? 'ema3' : args.includes('hr1') ? 'hr1' : args.includes('sw15') ? 'sw15' : args.includes('macd') ? 'macd' : args.includes('one') ? 'one' : args.includes('vap') ? 'vap' : 'ha';
 const FILT = args.includes('filt');
@@ -54,8 +58,8 @@ if (SINCE && !/^\d{4}-\d{2}-\d{2}$/.test(SINCE)) {
 }
 
 // ---------- Contract + costs ----------
-const TICK = MARKET.tick, POINT_VALUE = MARKET.pointValue;   // MES: $5/point ($1.25/tick). MNQ: $2/point ($0.50/tick)
-const COMMISSION_RT = 2.0;                   // $1 per side
+const TICK = MARKET.tick; let POINT_VALUE = MARKET.pointValue;   // MES: $5/point ($1.25/tick). MNQ: $2/point ($0.50/tick)
+let COMMISSION_RT = MARKET.etf ? 0 : 2.0;   // futures: $1 per side. ETFs: $0 at commission-free brokers
 const SLIP = 1 * TICK;                       // 1 tick slippage on market entries and stop exits
 const RTH_OPEN = 9 * 60 + 30;                // 9:30 NY
 
@@ -164,7 +168,7 @@ const VARIANTS = STRATEGY === 'ha'
 
 // ---------- Data (with local cache) ----------
 async function fetchChart(sym, query) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?${query}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?${query}${MARKET.etf ? '&includePrePost=true' : ''}`;
   const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json();
@@ -3182,6 +3186,11 @@ function medianOpeningRange(bs) {
   return w.length ? w[Math.floor(w.length / 2)] : null;
 }
 let scaleNote = '';
+if (MARKET.etf) {   // value of a 1-point move = number of (fractional) shares that ACCOUNT dollars buys
+  const closes = bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960).map(b => b.c).sort((a, b) => a - b);
+  const px = closes[Math.floor(closes.length / 2)];
+  POINT_VALUE = ACCOUNT / px;
+}
 if (MARKET !== MARKETS.mes) {
   let scale = null, how = '';
   const mesFile = `${MARKETS.mes.cachePrefix}${INTERVAL}.json`;
@@ -3206,13 +3215,13 @@ if (STRATEGY === 'ha') prepHA(bars);
 
 const rthDays = d => new Set(bars.filter(b => b.ny.mins >= RTH_OPEN && b.ny.mins < 960 && (!d || b.ny.date >= d)).map(b => b.ny.date)).size;
 const stratName = STRATEGY === 'vap' ? 'Previous-day value area: 5-min close back inside after a close outside, target POC' : STRATEGY === 'one' ? '5-min swing levels: reaction candle at level, stop order past it, 2R' : STRATEGY === 'macd' ? 'MACD (12/26/9) cross below/above zero + 200 EMA trend, 1.5R' : STRATEGY === 'sw15' ? `15-min swing sweep + close back inside, ${INTERVAL} close past the sweep candle's close` : STRATEGY === 'hr1' ? `Previous 1-hour candle bias + ${INTERVAL} counter-trend failure (lower high / higher low), break of swing` : STRATEGY === 'ema3' ? '9/30/200 EMA: 200 trend, 9-30 pullback cross and re-cross, close beyond pullback swing' : STRATEGY === 'box' ? 'Box theory: fade the previous day high/low (box extended by overnight + first 15 min)' : STRATEGY === 'flag' ? `Bull/bear flag: 4+ candle impulse, pullback, break of prior candle (${INTERVAL} chart)` : STRATEGY === 'orb5' ? '5-min opening range breakout (9:30 candle), 5-min close outside, optional 9/21 EMA filter' : STRATEGY === 'tl' ? 'Trendline action line / safety line (break one line, trail stop on the opposite line)' : STRATEGY === 'ha' ? 'Heikin Ashi pullback' : STRATEGY === 'orb' ? 'Opening Range Breakout' : STRATEGY === 'sd' ? 'Supply & demand zones (200 EMA)' : STRATEGY === 'ldn' ? '3AM-9:30 range: breakout / retest / sweep (5-min)' : STRATEGY === 'orbp' ? '15-min opening range: 5-min close outside, limit entry on pullback into the range' : STRATEGY === 'e50' ? '50 EMA cross, 2-candle pullback, break of swing high, chandelier stop' : STRATEGY === 'fvgo' ? `First-candle range break with a fair value gap, then gap retest (${INTERVAL} data)` : STRATEGY === 'ifvg' ? `IFVG model: 15-min gap key level, highest-timeframe (1-5 min) gap inversion entry, 9:30-11 (${INTERVAL} data)` : STRATEGY === 'snk' ? 'Sneaky pivot: 15-min open candle into prev-day/swing level, sneaky candle, break of it' : STRATEGY === 'asia' ? 'Sweep & flip: Asian range (8 PM-3 AM) swept at London open, 15-min candles, trades 3-6 AM' : STRATEGY === 'orev' ? `Morning reversal: fast move with 2+ FVGs, low/high at 9:35-10:15, higher low + break (${INTERVAL} entries)` : STRATEGY === 'vwap' ? 'VWAP + 9 EMA: test of both lines, clean candle through them, break of its low/high (5-min)' : STRATEGY === 'htf' ? `Higher-timeframe zone break & retest, ${INTERVAL} structure-break entry` : STRATEGY === 'p3' ? 'Power of Three: sweep of prev-day/London hi-lo after 9:30, reverse (5-min)' : STRATEGY === 'ema8' ? `8 EMA trend continuation (${INTERVAL} chart)` : STRATEGY === 'ovn' ? 'Overnight (6 PM-9:30) high/low break: retest or breakout, 2 contracts, trim + runner (5-min)' : STRATEGY === 'eng' ? `Engulfing candle + 200 EMA + RSI above/below 50 (${INTERVAL} chart)` : STRATEGY === 'scalp' ? `Morning scalp: break & retest of key level, 9:30-11:00 only (${INTERVAL} chart)` : STRATEGY === 'slc' ? `SLC: 4H structure + 5-min supply/demand + stochastic confirmation (${INTERVAL} fills)` : STRATEGY === 'cs' ? `Change of character + FVG midpoint (15m bias, ${INTERVAL} entries)` : STRATEGY === 'pdh' ? 'Previous-day high/low break & retest + daily 9/21 EMA trend' : STRATEGY === 'fbr' ? 'First-bar reversal (fade big 9:30 bar past its midpoint)' : STRATEGY === 'dorb' ? 'Displacement ORB (9:30-9:45) + zone entry + session filter' : STRATEGY === 'h2' ? `Two-legged pullback to 21 EMA (${INTERVAL} chart)` : STRATEGY === 'orr' ? '30-min opening range (9:30-10:00): breakout / retest / sweep (5-min)' : 'Overnight high/low break & retest (5-min)';
-console.log(`\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
+console.log(MARKET.etf ? `\nMarket: ${MARKET.name}, $${ACCOUNT} account = ${POINT_VALUE.toFixed(3)} shares (fractional), $${POINT_VALUE.toFixed(2)} per $1 move` : `\nMarket: ${MARKET.name}, $${POINT_VALUE} per point`);
 console.log(`Strategy: ${stratName}, ${INTERVAL} bars`);
 if (scaleNote) console.log(scaleNote);
 console.log(`Data: ${used}`);
 console.log(`      ${bars[0].ny.date} to ${bars.at(-1).ny.date} (NY time), ${rthDays()} trading days`);
 if (SINCE) console.log(`FORWARD TEST: only counting trades from ${SINCE} on (${rthDays(SINCE)} trading days so far)`);
-console.log(`Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on entries and stops\n`);
+console.log(MARKET.etf ? `Costs: $0 commission + 1 cent slippage per share on entries and stops (all $ figures are for a $${ACCOUNT} account)\n` : `Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on entries and stops\n`);
 
 if (EXITS) {
   if (!(STRATEGY in FWD_ROW)) { console.log(`The exit test is for the forward-test strategies: ${Object.keys(FWD_ROW).join(', ')}`); process.exit(1); }

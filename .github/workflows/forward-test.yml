@@ -129,6 +129,38 @@ jobs:
             node mes_backtest.mjs 1m hr1 filt since 2026-10-12
             echo '```'
             echo
+            echo "# \$100 ETF tracks - fractional shares, \$0 commission (locked 2026-10-23, started 2026-10-26). Net \$ on a \$100 account = % return"
+            echo
+            echo "## 3AM-range sweep - QQQ (watch row 4: sweep, R:R 1.5)"
+            echo '```'
+            node mes_backtest.mjs qqq ldn since 2026-10-26
+            echo '```'
+            echo
+            echo "## 3AM-range sweep - SPY (watch row 4: sweep, R:R 1.5)"
+            echo '```'
+            node mes_backtest.mjs spy ldn since 2026-10-26
+            echo '```'
+            echo
+            echo "## 3AM-range sweep + VWAP side - QQQ (watch filter: vwap)"
+            echo '```'
+            node mes_backtest.mjs qqq ldn filt since 2026-10-26
+            echo '```'
+            echo
+            echo "## 3AM-range sweep + VWAP side - SPY (watch filter: vwap)"
+            echo '```'
+            node mes_backtest.mjs spy ldn filt since 2026-10-26
+            echo '```'
+            echo
+            echo "## ORB 15-min, 2R + trend & skip choppy - SPY, 5-min (watch filter: ema+chop)"
+            echo '```'
+            node mes_backtest.mjs spy orb filt since 2026-10-26
+            echo '```'
+            echo
+            echo "## ORB 15-min, 2R + trend & skip choppy - QQQ, 5-min (watch filter: ema+chop)"
+            echo '```'
+            node mes_backtest.mjs qqq orb filt since 2026-10-26
+            echo '```'
+            echo
             echo "# Exit tracks (locked 2026-10-10, started 2026-10-12) - compare the watched exit row to the 'fixed' row"
             echo
             echo "## First-candle FVG day entry + trailing stop - MNQ (watch exit: trail)"
