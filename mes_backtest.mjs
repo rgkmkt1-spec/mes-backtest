@@ -35,7 +35,7 @@ const MARKETS = {
   qqq: { name: 'QQQ (Nasdaq-100 ETF)', sym: 'QQQ', tick: 0.01, pointValue: 1, cachePrefix: 'bars_qqq_', filePrefix: 'qqq_', etf: true },
 };
 const ACCOUNT = +(process.env.ACCOUNT || 100);   // ETF position size in dollars (fractional shares)
-const KNOWN = ['mes', 'mnq', 'spy', 'qqq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt', 'exits'];
+const KNOWN = ['mes', 'mnq', 'spy', 'qqq', '1m', '5m', 'since', 'ha', 'orb', 'sd', 'onr', 'ldn', 'orr', 'h2', 'dorb', 'fbr', 'pdh', 'cs', 'slc', 'scalp', 'eng', 'ovn', 'ema8', 'p3', 'htf', 'vwap', 'orev', 'asia', 'snk', 'ifvg', 'fvgo', 'e50', 'orbp', 'tl', 'orb5', 'flag', 'box', 'ema3', 'hr1', 'sw15', 'macd', 'one', 'vap', 'filt', 'exits', 'botjson'];
 const unknown = args.filter((a, i) => !KNOWN.includes(a) && !(args[i - 1] === 'since'));
 if (unknown.length) {
   console.log(`\nUnknown option: ${unknown.join(', ')}`);
@@ -48,6 +48,7 @@ const INTERVAL = args.includes('1m') ? '1m' : '5m';
 const STRATEGY = args.includes('orb') ? 'orb' : args.includes('sd') ? 'sd' : args.includes('onr') ? 'onr' : args.includes('ldn') ? 'ldn' : args.includes('orr') ? 'orr' : args.includes('h2') ? 'h2' : args.includes('dorb') ? 'dorb' : args.includes('fbr') ? 'fbr' : args.includes('pdh') ? 'pdh' : args.includes('cs') ? 'cs' : args.includes('slc') ? 'slc' : args.includes('scalp') ? 'scalp' : args.includes('eng') ? 'eng' : args.includes('ovn') ? 'ovn' : args.includes('ema8') ? 'ema8' : args.includes('p3') ? 'p3' : args.includes('htf') ? 'htf' : args.includes('vwap') ? 'vwap' : args.includes('orev') ? 'orev' : args.includes('asia') ? 'asia' : args.includes('snk') ? 'snk' : args.includes('ifvg') ? 'ifvg' : args.includes('fvgo') ? 'fvgo' : args.includes('e50') ? 'e50' : args.includes('orbp') ? 'orbp' : args.includes('tl') ? 'tl' : args.includes('orb5') ? 'orb5' : args.includes('flag') ? 'flag' : args.includes('box') ? 'box' : args.includes('ema3') ? 'ema3' : args.includes('hr1') ? 'hr1' : args.includes('sw15') ? 'sw15' : args.includes('macd') ? 'macd' : args.includes('one') ? 'one' : args.includes('vap') ? 'vap' : 'ha';
 const FILT = args.includes('filt');
 const EXITS = args.includes('exits');
+const BOTJSON = args.includes('botjson');   // used by bot.mjs: print today's locked-row trades as JSON
 // Forward-test (locked) row for each strategy, used by the filter test
 const FWD_ROW = { ha: 0, orb: 4, sd: 1, ldn: 4, pdh: 3, fvgo: 2, hr1: 0 };
 const sinceIdx = args.indexOf('since');
@@ -188,7 +189,8 @@ async function download(sym) {
   if (INTERVAL === '5m') return fetchChart(sym, 'interval=5m&range=60d');
   const DAY = 86400, now = Math.floor(Date.now() / 1000);
   const all = new Map();
-  for (let start = now - 29 * DAY; start < now; start += 7 * DAY) {
+  const days = Math.min(29, +(process.env.BOT_DAYS || 29));     // bot.mjs only needs the last few days
+  for (let start = now - days * DAY; start < now; start += 7 * DAY) {
     const end = Math.min(start + 7 * DAY, now);
     try { for (const b of await fetchChart(sym, `interval=1m&period1=${start}&period2=${end}`)) all.set(b.t, b); }
     catch (e) { console.log(`  (skipped one 7-day chunk for ${sym}: ${e.message})`); }
@@ -682,6 +684,7 @@ function runLDN(bars, { rr, mode, rangeStart = '03:00', rangeEnd = '09:30', tag 
       if (t) { trades.push(t); pos = null; }
     }
   }
+  globalThis.__openPos = pos ? { dir: pos.dir, entryTime: pos.entryTime, entry: pos.entry, stop: pos.stop, target: pos.target, setup: pos.setup, date: pos.date } : null;
   return trades;
 }
 
@@ -3223,6 +3226,17 @@ console.log(`      ${bars[0].ny.date} to ${bars.at(-1).ny.date} (NY time), ${rth
 if (SINCE) console.log(`FORWARD TEST: only counting trades from ${SINCE} on (${rthDays(SINCE)} trading days so far)`);
 console.log(MARKET.etf ? `Costs: $0 commission + 1 cent slippage per share on entries and stops (all $ figures are for a $${ACCOUNT} account)\n` : `Costs: $${COMMISSION_RT} round-trip commission + 1 tick slippage on entries and stops\n`);
 
+if (BOTJSON) {
+  if (!(STRATEGY in FWD_ROW)) { console.log('BOTJSON {"error":"not a forward-test strategy"}'); process.exit(1); }
+  const v = VARIANTS[FWD_ROW[STRATEGY]];
+  const run = STRATEGY === 'ha' ? runHA : STRATEGY === 'orb' ? runORB : STRATEGY === 'sd' ? runSD : STRATEGY === 'ldn' ? runLDN : STRATEGY === 'pdh' ? runPDH : STRATEGY === 'fvgo' ? runFVGO : runHR1;
+  const today = nyTime(Math.floor(Date.now() / 1000)).date;
+  const lastBar = bars[bars.length - 1];
+  const tr = run(bars, v).filter(t => t.date === today).map(t => ({ dir: t.dir, entryTime: t.entryTime, entry: t.entry, stop: t.stop, target: t.target, exitTime: t.exitTime, exit: t.exit, reason: t.reason, setup: t.setup }));
+  // a trade still open at the last bar is not in the list; report it via the open-position hook below
+  console.log('BOTJSON ' + JSON.stringify({ today, lastBar: `${lastBar.ny.date} ${lastBar.ny.hm}`, row: v.label, trades: tr, open: globalThis.__openPos || null }));
+  process.exit(0);
+}
 if (EXITS) {
   if (!(STRATEGY in FWD_ROW)) { console.log(`The exit test is for the forward-test strategies: ${Object.keys(FWD_ROW).join(', ')}`); process.exit(1); }
   runExitTest(); process.exit(0);

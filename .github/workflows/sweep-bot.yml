@@ -1,0 +1,53 @@
+name: Sweep Bot (Alpaca paper)
+
+# Runs the 3AM-range sweep bot on SPY + QQQ during market hours, on GitHub's servers.
+# GitHub jobs can run at most 6 hours, so the day is split in two:
+#   morning run:   starts early, waits for 9:25 AM, trades until 12:30 PM New York
+#   afternoon run: queued behind the morning run, trades 12:30 PM - 4:00 PM
+# Both are scheduled early on purpose, so a late GitHub start doesn't miss trades.
+# Times are UTC and work in both summer (EDT) and winter (EST) time.
+on:
+  schedule:
+    - cron: '37 12 * * 1-5'   # morning run: 8:37 AM EDT / 7:37 AM EST
+    - cron: '37 15 * * 1-5'   # afternoon run: 11:37 AM EDT / 10:37 AM EST (waits for the morning run to finish)
+  workflow_dispatch:          # manual start from the Actions tab
+
+permissions:
+  contents: write             # saves bot/ (state, log, trade journal) back to the repo
+
+concurrency:
+  group: sweep-bot            # never two bots at once; the afternoon run queues behind the morning run
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350      # safety stop under GitHub's 6-hour limit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Pick morning or afternoon session
+        run: |
+          H=$(TZ=America/New_York date +%-H)
+          if [ "$H" -lt 12 ]; then echo "BOT_UNTIL=12:30" >> "$GITHUB_ENV"; echo "Morning run (until 12:30 PM NY)"; else echo "Afternoon run (until 4 PM NY)"; fi
+
+      - name: Run the bot
+        env:
+          ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
+          ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
+          BOT_DIR: bot
+        run: node bot.mjs
+
+      - name: Save bot state, log and trades to the repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/
+          git commit -m "Sweep bot $(TZ=America/New_York date '+%F %H:%M')" || echo "Nothing new to commit"
+          git pull --rebase -X theirs origin main || true
+          git push
