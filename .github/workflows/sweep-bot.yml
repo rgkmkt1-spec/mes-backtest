@@ -6,11 +6,10 @@ name: Sweep Bot (Alpaca paper)
 #   afternoon run: queued behind the morning run, trades 12:30 PM - 4:00 PM
 # Both are scheduled early on purpose, so a late GitHub start doesn't miss trades.
 # Times are UTC and work in both summer (EDT) and winter (EST) time.
+# Started by cron-job.org (free) at 9:15 AM and 12:25 PM New York on weekdays, through GitHub's
+# "Run workflow" API. GitHub's own scheduler was dropped: it started the bot 6 hours late on 2026-10-26.
 on:
-  schedule:
-    - cron: '37 12 * * 1-5'   # morning run: 8:37 AM EDT / 7:37 AM EST
-    - cron: '37 15 * * 1-5'   # afternoon run: 11:37 AM EDT / 10:37 AM EST (waits for the morning run to finish)
-  workflow_dispatch:          # manual start from the Actions tab
+  workflow_dispatch:          # started by cron-job.org, or manually from the Actions tab
 
 permissions:
   contents: write             # saves bot/ (state, log, trade journal) back to the repo
@@ -47,7 +46,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bot/
+          git add -f bot/   # -f: the .gitignore lines that hide local bot files must not block this folder
           git commit -m "Sweep bot $(TZ=America/New_York date '+%F %H:%M')" || echo "Nothing new to commit"
           git pull --rebase -X theirs origin main || true
           git push
