@@ -24,6 +24,9 @@ jobs:
     timeout-minutes: 350      # safety stop under GitHub's 6-hour limit
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main           # latest main, not the commit from when the run was triggered: the afternoon run
+                              # is triggered at 12:25 but starts at 12:30, after the morning run saved its log/state
 
       - uses: actions/setup-node@v4
         with:
@@ -48,5 +51,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f bot/   # -f: the .gitignore lines that hide local bot files must not block this folder
           git commit -m "Sweep bot $(TZ=America/New_York date '+%F %H:%M')" || echo "Nothing new to commit"
-          git pull --rebase -X theirs origin main || true
+          git pull --rebase origin main || true
           git push
