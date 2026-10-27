@@ -124,6 +124,26 @@ async function flattenAll(why) {   // safety net at 3:57 PM
   const state = loadState();
   for (const sym of SYMBOLS) if (state[sym]?.status === 'open') await exitTrade(sym, state[sym], why);
   saveState(state);
+  // Second safety net: close ANY bot symbol still held on Alpaca, even if the saved state lost track of it,
+  // so nothing is ever held overnight.
+  const mine = new Set([...SYMBOLS, ...Object.values(INVERSE)]);
+  try {
+    for (const p of await alpaca('GET', '/v2/positions')) {
+      if (!mine.has(p.symbol)) continue;
+      await alpaca('DELETE', `/v2/positions/${p.symbol}`);
+      log(`SAFETY: closed untracked ${p.symbol} position (${p.qty} sh) - the saved state had lost it`);
+    }
+  } catch (e) { log(`SAFETY check failed: ${e.message}`); }
+}
+
+async function startupCheck() {   // warn if Alpaca holds something the saved state doesn't know about
+  const state = loadState(), t = ny();
+  const known = new Set(state.date === t.date ? SYMBOLS.filter(s => state[s]?.status === 'open').map(s => state[s].traded) : []);
+  const mine = new Set([...SYMBOLS, ...Object.values(INVERSE)]);
+  try {
+    for (const p of await alpaca('GET', '/v2/positions'))
+      if (mine.has(p.symbol) && !known.has(p.symbol)) log(`WARNING: Alpaca holds ${p.qty} ${p.symbol} that the bot's state doesn't know about - it will be closed at 3:57 PM`);
+  } catch (e) { log(`startup check failed: ${e.message}`); }
 }
 
 // ---------- main ----------
@@ -142,6 +162,7 @@ if (mode === 'check') {
 if (mode === 'once') { await cycle(); process.exit(0); }
 
 log(`Bot started: ${SYMBOLS.join(' + ')}, $${DOLLARS} each, Alpaca PAPER`);
+await startupCheck();
 for (;;) {
   const t = ny();
   if (t.wd === 'Sat' || t.wd === 'Sun') { log('Weekend - exiting'); break; }
@@ -151,7 +172,7 @@ for (;;) {
     try {
       const clock = await alpaca('GET', '/v2/clock');
       if (!clock.is_open && t.mins >= 9 * 60 + 31) { log('Market closed today (holiday?) - exiting'); break; }
-      if (t.mins >= 15 * 60 + 57) await flattenAll('time (3:57 safety)');
+      if (t.mins >= 15 * 60 + 57) await flattenAll('time (3:57 safety)');   // repeats 3:57-3:59, so a failed close is retried
       else await cycle();
     } catch (e) { log(`cycle error: ${e.message}`); }
   }
