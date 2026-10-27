@@ -93,7 +93,7 @@ async function cycle() {
     const done = sig.trades[0], open = sig.open && sig.open.date === t.date ? sig.open : null;
 
     if (st.status === 'none') {
-      if (done) { st.status = 'missed'; log(`${sym}: today's signal already finished before the bot saw it (${done.reason}) - skipped`); continue; }
+      if (done) { st.status = 'missed'; log(`${sym}: today's signal already finished before the bot saw it (${done.reason}, entered ${done.entryTime} @ ${done.entry}, exited ${done.exitTime} @ ${done.exit}) - skipped`); continue; }
       if (!open) continue;
       const traded = open.dir === 1 ? sym : INVERSE[sym];
       try {
@@ -104,7 +104,12 @@ async function cycle() {
       } catch (e) { st.status = 'missed'; log(`${sym}: entry FAILED (${e.message}) - skipped for today`); }
     } else if (st.status === 'open' && done) {
       await exitTrade(sym, st, done.reason);
-    }
+    } else if (st.status === 'open' && !open) {
+      // The data provider revised its bars and today's signal no longer exists: don't hold a trade with no rule behind it.
+      st.gone = (st.gone || 0) + 1;
+      if (st.gone >= 2) await exitTrade(sym, st, 'signal vanished (data revised)');
+      else log(`${sym}: signal no longer in the data - closing next minute if it doesn't come back`);
+    } else if (st.status === 'open') st.gone = 0;
   }
   saveState(state);
 }
