@@ -203,7 +203,8 @@ async function loadBars() {
   if (process.env.SYNTH) return { bars: synthBars(), used: 'SYNTHETIC (self-test)' };
   const cacheFile = `${MARKET.cachePrefix}${INTERVAL}.json`;
   const cache = new Map();
-  if (existsSync(cacheFile)) {
+  const botMode = !!process.env.BOT_DAYS;   // live bot: fresh download only, never the cache (see note below)
+  if (!botMode && existsSync(cacheFile)) {
     try { for (const b of JSON.parse(readFileSync(cacheFile, 'utf8'))) cache.set(b.t, b); }
     catch { console.log(`  WARNING: could not read ${cacheFile} (damaged - possibly a git merge conflict). Using fresh download only.`); }
   }
@@ -212,10 +213,13 @@ async function loadBars() {
   try { fresh = await download(MARKET.sym); } catch (e) { console.log(`Could not download ${MARKET.sym}: ${e.message}`); }
   if (fresh) for (const b of fresh) cache.set(b.t, b);
   if (!cache.size) { console.log('No data available. Check your internet connection and try again.'); process.exit(1); }
-  const bars = [...cache.values()].sort((a, b) => a.t - b.t);
+  // Yahoo stamps the still-forming bar with the current second (e.g. 09:52:37), not the minute. Saved or merged,
+  // those partial bars never get replaced and corrupt later 5-minute candles, so keep minute-aligned bars only.
+  const step = INTERVAL === '1m' ? 60 : 300;
+  const bars = [...cache.values()].filter(b => b.t % step === 0).sort((a, b) => a.t - b.t);
   // Only the GitHub Actions bot saves the data files. Local runs use the merged data in memory
   // but never change the saved files, so "git pull" can't hit merge conflicts on them.
-  const saving = process.env.GITHUB_ACTIONS === 'true' || process.env.SAVE_BARS === '1';
+  const saving = !botMode && (process.env.GITHUB_ACTIONS === 'true' || process.env.SAVE_BARS === '1');
   if (saving) writeFileSync(cacheFile, JSON.stringify(bars));
   const note = fresh
     ? `${cache.size - before} new bars ${saving ? `added to ${cacheFile}` : `downloaded (not saved locally; the weekly GitHub run saves ${cacheFile})`}`
