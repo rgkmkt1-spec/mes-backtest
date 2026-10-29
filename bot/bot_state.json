@@ -1,7 +1,7 @@
 {
   "date": "2026-10-29",
   "QQQ": {
-    "status": "open",
+    "status": "closed",
     "traded": "QQQ",
     "side": "long",
     "signalEntry": 715.1099755859375,
@@ -12,7 +12,7 @@
     "gone": 0
   },
   "SPY": {
-    "status": "open",
+    "status": "closed",
     "traded": "SPY",
     "side": "long",
     "signalEntry": 768.78001953125,
