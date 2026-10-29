@@ -90,6 +90,10 @@ async function cycle() {
     let sig;
     try { sig = await signal(sym); } catch (e) { log(`${sym}: ${e.message}`); continue; }
     if (sig.today !== t.date) continue;
+    // Diagnostics: note when the price data is running behind the clock (logged once per episode)
+    const [lh, lm] = sig.lastBar.slice(11).split(':').map(Number), lag = t.mins - (lh * 60 + lm);
+    if (sig.lastBar.slice(0, 10) === t.date && lag >= 4) { if (!st.laggy) log(`${sym}: price data is ${lag} min behind (last bar ${sig.lastBar.slice(11)})`); st.laggy = true; }
+    else if (st.laggy) { log(`${sym}: price data caught up`); st.laggy = false; }
     const done = sig.trades[0], open = sig.open && sig.open.date === t.date ? sig.open : null;
 
     if (st.status === 'none') {
@@ -100,7 +104,7 @@ async function cycle() {
         const o = await alpaca('POST', '/v2/orders', { symbol: traded, notional: DOLLARS.toFixed(2), side: 'buy', type: 'market', time_in_force: 'day' });
         const f = await fillOf(o.id);
         Object.assign(st, { status: 'open', traded, side: open.dir === 1 ? 'long' : 'short', signalEntry: open.entry, stop: open.stop, target: open.target, fillIn: f.price, qty: f.qty });
-        log(`${sym}: ENTER ${st.side} via ${traded} - bought ${f.qty} @ ${f.price} | ${sym} stop ${open.stop}, target ${open.target} | ${open.setup}`);
+        log(`${sym}: ENTER ${st.side} via ${traded} - bought ${f.qty} @ ${f.price} | ${sym} stop ${open.stop}, target ${open.target} | signal bar ${open.entryTime.slice(11)} | ${open.setup}`);
       } catch (e) { st.status = 'missed'; log(`${sym}: entry FAILED (${e.message}) - skipped for today`); }
     } else if (st.status === 'open' && done) {
       await exitTrade(sym, st, done.reason);
