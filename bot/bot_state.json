@@ -1,25 +1,11 @@
 {
-  "date": "2026-10-29",
+  "date": "2026-10-30",
   "QQQ": {
-    "status": "closed",
-    "traded": "QQQ",
-    "side": "long",
-    "signalEntry": 715.1099755859375,
-    "stop": 711.61,
-    "target": 720.36,
-    "fillIn": 714.552,
-    "qty": 0.069959918,
-    "gone": 0
+    "status": "none",
+    "laggy": false
   },
   "SPY": {
-    "status": "closed",
-    "traded": "SPY",
-    "side": "long",
-    "signalEntry": 768.78001953125,
-    "stop": 767.26,
-    "target": 771.0600000000001,
-    "fillIn": 769.082,
-    "qty": 0.06499957,
-    "gone": 0
+    "status": "none",
+    "laggy": false
   }
 }

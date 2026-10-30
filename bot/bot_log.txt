@@ -19,3 +19,9 @@
 2026-10-29T17:48:06.756Z [13:48 NY] SPY: EXIT (stop) - sold SPY @ 767.144 | P&L $-0.13
 2026-10-29T19:56:06.164Z [15:56 NY] QQQ: EXIT (time) - sold QQQ @ 714.832 | P&L $0.02
 2026-10-29T20:00:05.041Z [16:00 NY] After 4 PM - done for today
+2026-10-30T13:15:18.232Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-10-30T14:06:05.742Z [10:06 NY] QQQ: price data is 4 min behind (last bar 10:02)
+2026-10-30T14:07:06.414Z [10:07 NY] SPY: price data is 4 min behind (last bar 10:03)
+2026-10-30T14:11:05.740Z [10:11 NY] QQQ: price data caught up
+2026-10-30T14:11:06.399Z [10:11 NY] SPY: price data caught up
+2026-10-30T16:30:05.055Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
