@@ -25,3 +25,39 @@
 2026-10-30T14:11:05.740Z [10:11 NY] QQQ: price data caught up
 2026-10-30T14:11:06.399Z [10:11 NY] SPY: price data caught up
 2026-10-30T16:30:05.055Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
+2026-10-30T16:30:18.979Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-10-30T16:40:05.682Z [12:40 NY] QQQ: price data is 4 min behind (last bar 12:36)
+2026-10-30T16:40:06.332Z [12:40 NY] SPY: price data is 4 min behind (last bar 12:36)
+2026-10-30T16:44:05.705Z [12:44 NY] QQQ: price data caught up
+2026-10-30T16:47:05.735Z [12:47 NY] QQQ: price data is 4 min behind (last bar 12:43)
+2026-10-30T16:48:05.664Z [12:48 NY] QQQ: price data caught up
+2026-10-30T16:49:05.735Z [12:49 NY] QQQ: price data is 4 min behind (last bar 12:45)
+2026-10-30T16:51:05.742Z [12:51 NY] QQQ: price data caught up
+2026-10-30T16:52:05.732Z [12:52 NY] QQQ: price data is 4 min behind (last bar 12:48)
+2026-10-30T16:54:05.732Z [12:54 NY] QQQ: price data caught up
+2026-10-30T16:55:05.686Z [12:55 NY] QQQ: price data is 4 min behind (last bar 12:51)
+2026-10-30T16:57:05.706Z [12:57 NY] QQQ: price data caught up
+2026-10-30T17:05:05.666Z [13:05 NY] QQQ: price data is 4 min behind (last bar 13:01)
+2026-10-30T17:09:05.704Z [13:09 NY] QQQ: price data caught up
+2026-10-30T17:11:05.817Z [13:11 NY] QQQ: price data is 4 min behind (last bar 13:07)
+2026-10-30T17:14:05.749Z [13:14 NY] QQQ: price data caught up
+2026-10-30T17:15:05.750Z [13:15 NY] QQQ: price data is 4 min behind (last bar 13:11)
+2026-10-30T17:16:05.993Z [13:16 NY] QQQ: price data caught up
+2026-10-30T17:28:05.698Z [13:28 NY] QQQ: price data is 4 min behind (last bar 13:24)
+2026-10-30T17:36:05.785Z [13:36 NY] QQQ: price data caught up
+2026-10-30T17:37:05.690Z [13:37 NY] QQQ: price data is 4 min behind (last bar 13:33)
+2026-10-30T17:38:05.701Z [13:38 NY] QQQ: price data caught up
+2026-10-30T17:47:05.675Z [13:47 NY] QQQ: price data is 4 min behind (last bar 13:43)
+2026-10-30T17:51:05.766Z [13:51 NY] QQQ: price data caught up
+2026-10-30T18:30:05.702Z [14:30 NY] QQQ: price data is 4 min behind (last bar 14:26)
+2026-10-30T18:46:05.793Z [14:46 NY] QQQ: price data caught up
+2026-10-30T18:58:05.728Z [14:58 NY] QQQ: price data is 4 min behind (last bar 14:54)
+2026-10-30T18:59:05.755Z [14:59 NY] QQQ: price data caught up
+2026-10-30T19:04:05.716Z [15:04 NY] QQQ: price data is 4 min behind (last bar 15:00)
+2026-10-30T19:08:05.748Z [15:08 NY] QQQ: price data caught up
+2026-10-30T19:09:05.906Z [15:09 NY] QQQ: price data is 4 min behind (last bar 15:05)
+2026-10-30T19:14:05.751Z [15:14 NY] QQQ: price data caught up
+2026-10-30T19:17:05.685Z [15:17 NY] QQQ: price data is 4 min behind (last bar 15:13)
+2026-10-30T19:18:05.699Z [15:18 NY] QQQ: price data caught up
+2026-10-30T19:22:07.634Z [15:22 NY] QQQ: price data is 4 min behind (last bar 15:18)
+2026-10-30T20:00:05.051Z [16:00 NY] After 4 PM - done for today
