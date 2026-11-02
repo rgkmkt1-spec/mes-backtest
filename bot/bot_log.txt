@@ -61,3 +61,14 @@
 2026-10-30T19:18:05.699Z [15:18 NY] QQQ: price data caught up
 2026-10-30T19:22:07.634Z [15:22 NY] QQQ: price data is 4 min behind (last bar 15:18)
 2026-10-30T20:00:05.051Z [16:00 NY] After 4 PM - done for today
+2026-11-02T14:15:22.838Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-02T14:25:05.933Z [09:25 NY] QQQ: price data is 56 min behind (last bar 08:29)
+2026-11-02T14:25:06.655Z [09:25 NY] SPY: price data is 56 min behind (last bar 08:29)
+2026-11-02T14:32:05.911Z [09:32 NY] QQQ: price data caught up
+2026-11-02T14:32:06.595Z [09:32 NY] SPY: price data caught up
+2026-11-02T14:37:06.114Z [09:37 NY] QQQ: ENTER long via QQQ - bought 0.071959947 @ 694.692 | QQQ stop 694.13, target 696.5600000000001 | signal bar 09:35 | sweep of 3AM low 694.49, reclaimed (range 694.49-698.00)
+2026-11-02T14:38:06.117Z [09:38 NY] QQQ: EXIT (stop (gap)) - sold QQQ @ 693.506 | P&L $-0.09
+2026-11-02T14:50:06.214Z [09:50 NY] SPY: price data is 4 min behind (last bar 09:46)
+2026-11-02T15:09:06.090Z [10:09 NY] SPY: ENTER short via SH - bought 1.530243663 @ 32.668 | SPY stop 760.57, target 759.47 | signal bar 09:55 | sweep of 3AM high 760.30, reclaimed (range 755.72-760.30)
+2026-11-02T15:12:08.175Z [10:12 NY] SPY: EXIT (stop) - sold SH @ 32.64 | P&L $-0.04
+2026-11-02T17:30:05.050Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
