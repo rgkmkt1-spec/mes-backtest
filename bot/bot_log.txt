@@ -88,3 +88,5 @@
 2026-11-03T16:12:06.024Z [11:12 NY] QQQ: ENTER short via PSQ - bought 1.868924779 @ 26.748 | QQQ stop 688.7, target 686.35 | signal bar 11:10 | sweep of 3AM high 688.25, reclaimed (range 678.99-688.25)
 2026-11-03T16:22:08.024Z [11:22 NY] QQQ: EXIT (target) - sold PSQ @ 26.8 | P&L $0.10
 2026-11-03T17:30:05.041Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
+2026-11-03T17:30:51.497Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-03T21:00:05.056Z [16:00 NY] After 4 PM - done for today
