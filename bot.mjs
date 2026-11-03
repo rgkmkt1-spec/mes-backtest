@@ -61,7 +61,18 @@ function signal(sym) {   // today's locked-row sweep trades from the backtester,
   });
 }
 
-const loadState = () => { try { return JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } };
+const MAX_LATE = 5;   // minutes: skip an entry if the signal bar is older than this
+async function livePrice(sym) {   // latest trade from Alpaca's free IEX feed; null if unavailable (then only the time guard applies)
+  try {
+    const r = await fetch(`https://data.alpaca.markets/v2/stocks/${sym}/trades/latest?feed=iex`,
+      { headers: { 'APCA-API-KEY-ID': KEYS.key, 'APCA-API-SECRET-KEY': KEYS.secret } });
+    if (!r.ok) return null;
+    const p = +(await r.json())?.trade?.p;
+    return p > 0 ? p : null;
+  } catch { return null; }
+}
+
+const loadState =() => { try { return JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } };
 const saveState = s => writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
 
 async function fillOf(orderId) {   // wait briefly for a market order to fill
@@ -99,6 +110,14 @@ async function cycle() {
     if (st.status === 'none') {
       if (done) { st.status = 'missed'; log(`${sym}: today's signal already finished before the bot saw it (${done.reason}, entered ${done.entryTime} @ ${done.entry}, exited ${done.exitTime} @ ${done.exit}) - skipped`); continue; }
       if (!open) continue;
+      // Late-entry guards (Yahoo's free data sometimes runs 10+ minutes behind):
+      // 1) the signal must be fresh, 2) the live price (from Alpaca) must still be between stop and target.
+      const [eh, em] = open.entryTime.slice(11).split(':').map(Number), late = t.mins - (eh * 60 + em);
+      if (late > MAX_LATE) { st.status = 'missed'; log(`${sym}: signal bar ${open.entryTime.slice(11)} is ${late} min old (data was late) - skipped`); continue; }
+      const px = await livePrice(sym);
+      if (px != null && (open.dir === 1 ? (px <= open.stop || px >= open.target) : (px >= open.stop || px <= open.target))) {
+        st.status = 'missed'; log(`${sym}: live price ${px} is already past the stop/target (${open.stop} / ${open.target}) - skipped`); continue;
+      }
       const traded = open.dir === 1 ? sym : INVERSE[sym];
       try {
         const o = await alpaca('POST', '/v2/orders', { symbol: traded, notional: DOLLARS.toFixed(2), side: 'buy', type: 'market', time_in_force: 'day' });
@@ -166,6 +185,7 @@ if (mode === 'check') {
   }
   const sig = await signal('QQQ');
   console.log(`Signal check OK - data up to ${sig.lastBar}, rule: ${sig.row}`);
+  for (const s of SYMBOLS) console.log(`  Live price check ${s}: ${(await livePrice(s)) ?? 'UNAVAILABLE (only the time guard will apply)'}`);
   process.exit(0);
 }
 if (mode === 'once') { await cycle(); process.exit(0); }
