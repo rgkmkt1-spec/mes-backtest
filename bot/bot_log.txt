@@ -99,3 +99,5 @@
 2026-11-05T17:30:05.015Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
 2026-11-05T17:30:20.753Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
 2026-11-05T21:00:05.048Z [16:00 NY] After 4 PM - done for today
+2026-11-06T14:15:48.195Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-06T17:30:05.057Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
