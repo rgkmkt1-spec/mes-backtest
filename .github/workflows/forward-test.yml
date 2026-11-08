@@ -161,6 +161,18 @@ jobs:
             node mes_backtest.mjs qqq orb filt since 2026-10-26
             echo '```'
             echo
+            echo "# \$100 ETF tracks, round 2 - previous-day high/low retest (locked 2026-11-07, started 2026-11-09)"
+            echo
+            echo "## Previous-day high/low retest - SPY (watch row 3: no trend filter, R:R 2)"
+            echo '```'
+            node mes_backtest.mjs spy pdh since 2026-11-09
+            echo '```'
+            echo
+            echo "## Previous-day high/low retest - QQQ (watch row 3: no trend filter, R:R 2)"
+            echo '```'
+            node mes_backtest.mjs qqq pdh since 2026-11-09
+            echo '```'
+            echo
             echo "# Exit tracks (locked 2026-10-10, started 2026-10-12) - compare the watched exit row to the 'fixed' row"
             echo
             echo "## First-candle FVG day entry + trailing stop - MNQ (watch exit: trail)"
