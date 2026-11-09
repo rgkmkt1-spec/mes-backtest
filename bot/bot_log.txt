@@ -107,3 +107,5 @@
 2026-11-06T20:52:05.646Z [15:52 NY] QQQ: price data caught up
 2026-11-06T20:52:06.227Z [15:52 NY] SPY: price data caught up
 2026-11-06T21:00:05.002Z [16:00 NY] After 4 PM - done for today
+2026-11-09T14:15:21.461Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-09T17:30:05.052Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
