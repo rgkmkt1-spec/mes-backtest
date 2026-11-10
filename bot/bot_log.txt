@@ -117,3 +117,5 @@
 2026-11-10T15:57:05.911Z [10:57 NY] SPY: ENTER long via SPY - bought 0.066923705 @ 746.97 | SPY stop 745.99, target 748.3100000000001 | signal bar 10:55 | sweep of 3AM low 746.55, reclaimed (range 746.55-755.31)
 2026-11-10T16:09:05.893Z [11:09 NY] SPY: EXIT (target) - sold SPY @ 748.254 | P&L $0.09
 2026-11-10T17:30:05.056Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
+2026-11-10T17:30:18.486Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-10T21:00:05.017Z [16:00 NY] After 4 PM - done for today
