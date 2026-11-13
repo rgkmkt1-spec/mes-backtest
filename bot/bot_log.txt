@@ -132,3 +132,7 @@
 2026-11-12T17:30:05.056Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
 2026-11-12T17:30:20.425Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
 2026-11-12T21:00:05.005Z [16:00 NY] After 4 PM - done for today
+2026-11-13T14:15:22.002Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-13T14:42:06.382Z [09:42 NY] QQQ: ENTER long via QQQ - bought 0.072927851 @ 685.472 | QQQ stop 683.95, target 687.85 | signal bar 09:40 | sweep of 3AM low 685.01, reclaimed (range 685.01-693.13)
+2026-11-13T14:45:07.124Z [09:45 NY] QQQ: EXIT (stop) - sold QQQ @ 683.89 | P&L $-0.12
+2026-11-13T17:30:05.036Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)

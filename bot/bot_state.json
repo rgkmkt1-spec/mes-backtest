@@ -1,17 +1,17 @@
 {
-  "date": "2026-11-12",
+  "date": "2026-11-13",
   "QQQ": {
-    "status": "missed"
+    "status": "closed",
+    "traded": "QQQ",
+    "side": "long",
+    "signalEntry": 685.51,
+    "stop": 683.95,
+    "target": 687.85,
+    "fillIn": 685.472,
+    "qty": 0.072927851,
+    "gone": 0
   },
   "SPY": {
-    "status": "closed",
-    "traded": "SH",
-    "side": "short",
-    "signalEntry": 757.979990234375,
-    "stop": 758.9,
-    "target": 756.6,
-    "fillIn": 32.768,
-    "qty": 1.52557373,
-    "gone": 0
+    "status": "none"
   }
 }
