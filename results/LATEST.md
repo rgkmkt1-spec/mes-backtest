@@ -1,11 +1,11 @@
-# MES forward test - 2026-11-13 9:29 PM ET
+# MES forward test - 2026-11-14 2:13 PM ET
 
 ## Heikin Ashi pullback (watch row 0: R:R 1, start 09:30)
 ```
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Heikin Ashi pullback, 1m bars
-Data: MES=F (6818 new bars added to bars_1m.json)
+Data: MES=F (1 new bars added to bars_1m.json)
       2026-09-10 to 2026-11-13 (NY time), 46 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (26 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -32,7 +32,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Opening Range Breakout, 1m bars
-Data: MES=F (1 new bars added to bars_1m.json)
+Data: MES=F (0 new bars added to bars_1m.json)
       2026-09-10 to 2026-11-13 (NY time), 46 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (26 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -59,8 +59,8 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Supply & demand zones (200 EMA), 5m bars
-Max stop scaled x8.49 by typical first-15-min range 142.3 pts vs MES 16.8 pts: HA 68 pts, ORB 102 pts
-Data: MNQ=F (1375 new bars added to bars_mnq_5m.json)
+Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -90,7 +90,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
-Data: MES=F (1374 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -117,7 +117,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Previous-day high/low break & retest + daily 9/21 EMA trend, 5m bars
-Data: MES=F (1 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -143,7 +143,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Previous-day high/low break & retest + daily 9/21 EMA trend, 5m bars
 Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
-Data: MNQ=F (1 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -169,7 +169,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
 Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
-Data: MNQ=F (1 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -195,7 +195,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Previous 1-hour candle bias + 1m counter-trend failure (lower high / higher low), break of swing, 1m bars
 Max stop scaled x7.99 by typical first-15-min range 141.8 pts vs MES 17.8 pts: HA 64 pts, ORB 95.75 pts
-Data: MNQ=F (6820 new bars added to bars_mnq_1m.json)
+Data: MNQ=F (1 new bars added to bars_mnq_1m.json)
       2026-09-09 to 2026-11-13 (NY time), 47 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -223,7 +223,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Opening Range Breakout, 1m bars
 Max stop scaled x7.99 by typical first-15-min range 141.8 pts vs MES 17.8 pts: HA 64 pts, ORB 95.75 pts
-Data: MNQ=F (1 new bars added to bars_mnq_1m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_1m.json)
       2026-09-09 to 2026-11-13 (NY time), 47 trading days
 FORWARD TEST: only counting trades from 2026-10-09 on (26 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -250,7 +250,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Supply & demand zones (200 EMA), 5m bars
-Data: MES=F (1 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -281,7 +281,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
 Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
-Data: MNQ=F (1 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -308,7 +308,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
-Data: MES=F (1 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -333,7 +333,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Previous 1-hour candle bias + 1m counter-trend failure (lower high / higher low), break of swing, 1m bars
-Data: MES=F (2 new bars added to bars_1m.json)
+Data: MES=F (0 new bars added to bars_1m.json)
       2026-09-10 to 2026-11-13 (NY time), 46 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -360,7 +360,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Opening Range Breakout, 1m bars
-Data: MES=F (1 new bars added to bars_1m.json)
+Data: MES=F (0 new bars added to bars_1m.json)
       2026-09-10 to 2026-11-13 (NY time), 46 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -390,7 +390,7 @@ without cutting the trade count so far that the result is just luck.
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Opening Range Breakout, 1m bars
 Max stop scaled x7.99 by typical first-15-min range 141.8 pts vs MES 17.8 pts: HA 64 pts, ORB 95.75 pts
-Data: MNQ=F (2 new bars added to bars_mnq_1m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_1m.json)
       2026-09-09 to 2026-11-13 (NY time), 47 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -419,7 +419,7 @@ without cutting the trade count so far that the result is just luck.
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
-Data: MES=F (1 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -449,7 +449,7 @@ without cutting the trade count so far that the result is just luck.
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
 Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
-Data: MNQ=F (1 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -479,7 +479,7 @@ without cutting the trade count so far that the result is just luck.
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: Previous 1-hour candle bias + 1m counter-trend failure (lower high / higher low), break of swing, 1m bars
 Max stop scaled x7.99 by typical first-15-min range 141.8 pts vs MES 17.8 pts: HA 64 pts, ORB 95.75 pts
-Data: MNQ=F (1 new bars added to bars_mnq_1m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_1m.json)
       2026-09-09 to 2026-11-13 (NY time), 47 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -508,7 +508,7 @@ without cutting the trade count so far that the result is just luck.
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: Previous 1-hour candle bias + 1m counter-trend failure (lower high / higher low), break of swing, 1m bars
-Data: MES=F (1 new bars added to bars_1m.json)
+Data: MES=F (0 new bars added to bars_1m.json)
       2026-09-10 to 2026-11-13 (NY time), 46 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -540,7 +540,7 @@ without cutting the trade count so far that the result is just luck.
 Market: QQQ (Nasdaq-100 ETF), $100 account = 0.139 shares (fractional), $0.14 per $1 move
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
 Max stop scaled x0.19 by typical first-15-min range 3.3 pts vs MES 17.5 pts: HA 1.5 pts, ORB 2.25 pts
-Data: QQQ (897 new bars added to bars_qqq_5m.json)
+Data: QQQ (1 new bars added to bars_qqq_5m.json)
       2026-07-31 to 2026-11-13 (NY time), 75 trading days
 FORWARD TEST: only counting trades from 2026-10-26 on (15 trading days so far)
 Costs: $0 commission + 1 cent slippage per share on entries and stops (all $ figures are for a $100 account)
@@ -568,7 +568,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: SPY (S&P 500 ETF), $100 account = 0.130 shares (fractional), $0.13 per $1 move
 Strategy: 3AM-9:30 range: breakout / retest / sweep (5-min), 5m bars
 Max stop scaled x0.09 by typical first-15-min range 1.6 pts vs MES 17.5 pts: HA 0.75 pts, ORB 1 pts
-Data: SPY (898 new bars added to bars_spy_5m.json)
+Data: SPY (1 new bars added to bars_spy_5m.json)
       2026-07-31 to 2026-11-13 (NY time), 75 trading days
 FORWARD TEST: only counting trades from 2026-10-26 on (15 trading days so far)
 Costs: $0 commission + 1 cent slippage per share on entries and stops (all $ figures are for a $100 account)
@@ -772,7 +772,7 @@ the last column shows the result if they had all been wins (best case). Truth is
 Market: MNQ (Micro E-mini Nasdaq-100), $2 per point
 Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
 Max stop scaled x8.13 by typical first-15-min range 142.3 pts vs MES 17.5 pts: HA 65 pts, ORB 97.5 pts
-Data: MNQ=F (1 new bars added to bars_mnq_5m.json)
+Data: MNQ=F (0 new bars added to bars_mnq_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
@@ -798,7 +798,7 @@ An exit is only worth switching to if it beats the strategy exit on BOTH markets
 
 Market: MES (Micro E-mini S&P 500), $5 per point
 Strategy: First-candle range break with a fair value gap, then gap retest (5m data), 5m bars
-Data: MES=F (1 new bars added to bars_5m.json)
+Data: MES=F (0 new bars added to bars_5m.json)
       2026-07-30 to 2026-11-13 (NY time), 76 trading days
 FORWARD TEST: only counting trades from 2026-10-12 on (25 trading days so far)
 Costs: $2 round-trip commission + 1 tick slippage on entries and stops
