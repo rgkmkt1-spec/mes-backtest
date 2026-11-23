@@ -1,25 +1,25 @@
 {
-  "date": "2026-11-20",
+  "date": "2026-11-23",
   "QQQ": {
     "status": "closed",
-    "traded": "QQQ",
-    "side": "long",
-    "signalEntry": 632.1600244140625,
-    "stop": 629.9,
-    "target": 635.5500000000001,
-    "fillIn": 630.244,
-    "qty": 0.079318486,
+    "traded": "PSQ",
+    "side": "short",
+    "signalEntry": 655.6200048828125,
+    "stop": 657.51,
+    "target": 652.79,
+    "fillIn": 27.638,
+    "qty": 1.808741587,
     "gone": 0
   },
   "SPY": {
     "status": "closed",
     "traded": "SH",
     "side": "short",
-    "signalEntry": 713.6400244140625,
-    "stop": 715.0500000000001,
-    "target": 711.53,
-    "fillIn": 34.818,
-    "qty": 1.435751622,
+    "signalEntry": 718.5399877929688,
+    "stop": 724.82,
+    "target": 709.12,
+    "fillIn": 34.518,
+    "qty": 1.448229909,
     "gone": 0
   }
 }
