@@ -192,3 +192,5 @@
 2026-11-25T21:00:05.056Z [16:00 NY] After 4 PM - done for today
 2026-11-26T14:15:19.668Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
 2026-11-26T14:31:05.154Z [09:31 NY] Market closed today (holiday?) - exiting
+2026-11-26T17:25:17.134Z [12:25 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-26T17:25:17.611Z [12:25 NY] Market closed today (holiday?) - exiting
