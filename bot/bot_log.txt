@@ -197,3 +197,5 @@
 2026-11-27T14:15:20.247Z [09:15 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
 2026-11-27T14:52:05.921Z [09:52 NY] QQQ: today's signal already finished before the bot saw it (target, entered 2026-11-27 09:50 @ 638.0499780273437, exited 2026-11-27 09:50 @ 639.38) - skipped
 2026-11-27T17:30:05.017Z [12:30 NY] Reached 12:30 - handing over to the afternoon run (open trades stay open)
+2026-11-27T17:30:20.684Z [12:30 NY] Bot started: QQQ + SPY, $50 each, Alpaca PAPER
+2026-11-27T18:00:05.205Z [13:00 NY] Market closed today (holiday?) - exiting
